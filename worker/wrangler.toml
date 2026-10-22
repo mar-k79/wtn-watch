@@ -1,0 +1,14 @@
+name = "wtn-explain"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[ai]
+binding = "AI"
+
+[vars]
+MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+
+[[kv_namespaces]]
+binding = "EXPLAIN"
+id = "9a92c87bb8ae47d9959e17bf338b13c2"
