@@ -32,9 +32,12 @@ const tones: Record<Tone, string> = {
   accent: 'bg-accent/10 text-accent ring-accent/25',
 };
 
-export function Badge({ children, tone = 'neutral', className }: { children: ReactNode; tone?: Tone; className?: string }) {
+export function Badge({ children, tone = 'neutral', className, help }: { children: ReactNode; tone?: Tone; className?: string; help?: string }) {
   return (
-    <span className={cx('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset', tones[tone], className)}>
+    <span
+      title={help}
+      className={cx('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset', help && 'cursor-help', tones[tone], className)}
+    >
       {children}
     </span>
   );

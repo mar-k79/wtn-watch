@@ -181,6 +181,8 @@ export function Proposals({ go }: { go: (h: string) => void }) {
         </div>
       </div>
 
+      <BadgeGuide />
+
       <FilterBar active={active} onClear={clear}>
         <SearchInput value={q} onChange={setQ} placeholder="Search # or title" />
         <Select
@@ -269,13 +271,13 @@ function Row({ p, fns, i, v, pf, onOpen }: { p: ProposalData; fns?: Map<bigint, 
             <Badge>{fn ? fn.name : humanize(actionKey(p))}</Badge>
             {fn?.method && <Badge className="font-mono">{fn.method}</Badge>}
             {pf && pf.level !== 'green' && (
-              <Badge tone={pf.level === 'red' ? 'no' : 'warn'}>
+              <Badge tone={pf.level === 'red' ? 'no' : 'warn'} help={pf.text}>
                 <AlertTriangle className="size-3" /> {pf.level === 'red' ? 'Will fail' : pf.title}
               </Badge>
             )}
-            {v && <Badge tone={verdictInfo[v.consistency]?.tone ?? 'warn'}>{verdictInfo[v.consistency]?.label ?? v.consistency}</Badge>}
+            {v && <Badge tone={verdictInfo[v.consistency]?.tone ?? 'warn'} help={verdictInfo[v.consistency]?.help}>{verdictInfo[v.consistency]?.label ?? v.consistency}</Badge>}
             {v && v.risks > 0 && (
-              <Badge tone="no">
+              <Badge tone="no" help="Concrete risks the AI found, for example irreversible effects or ways the change could be undone. Open the proposal to read them.">
                 <AlertTriangle className="size-3" /> {v.risks} risk{v.risks > 1 ? 's' : ''}
               </Badge>
             )}
@@ -303,5 +305,51 @@ function Row({ p, fns, i, v, pf, onOpen }: { p: ProposalData; fns?: Map<bigint, 
         </span>
       </div>
     </motion.button>
+  );
+}
+
+function BadgeGuide() {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem('badge-guide') !== 'closed';
+    } catch {
+      return true;
+    }
+  });
+  const toggle = () => {
+    setOpen((o) => {
+      try {
+        localStorage.setItem('badge-guide', o ? 'closed' : 'open');
+      } catch {}
+      return !o;
+    });
+  };
+  const rows: [string, 'yes' | 'warn' | 'no', string][] = [
+    ['Will fail', 'no', 'Checked against today\'s on-chain state: if executed now, the call would return an error and change nothing (e.g. the neuron is already in the state the proposal tries to reach).'],
+    ['N risks', 'no', 'Concrete risks found by the AI: irreversible effects, money leaving the DAO, or ways the change could be undone later.'],
+    ['Summary mismatch', 'no', verdictInfo.mismatch.help],
+    ['Unconfirmed claims', 'warn', verdictInfo.partial.help],
+    ['AI: no contradiction', 'yes', verdictInfo.match.help],
+  ];
+  return (
+    <div className="rounded-xl border border-line bg-panel/70 px-4 py-2.5 text-sm">
+      <button onClick={toggle} className="flex w-full items-center justify-between text-xs font-medium text-muted hover:text-fg" aria-expanded={open}>
+        <span className="inline-flex items-center gap-1.5">
+          <Sparkles className="size-3.5 text-accent" /> What do the labels mean?
+        </span>
+        <ChevronRight className={`size-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && (
+        <ul className="mt-2.5 space-y-2 pb-1">
+          {rows.map(([label, tone, text]) => (
+            <li key={label} className="flex items-start gap-3">
+              <Badge tone={tone} className="mt-0.5 shrink-0">{label}</Badge>
+              <span className="text-xs leading-relaxed text-fg/75">{text}</span>
+            </li>
+          ))}
+          <li className="pt-1 text-[11px] text-muted">Hover a label (or open the proposal) to see the reason for that specific proposal.</li>
+        </ul>
+      )}
+    </div>
   );
 }

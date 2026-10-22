@@ -18,7 +18,19 @@ export async function fetchVerdicts(ids: bigint[]): Promise<Record<string, Verdi
 }
 
 export const verdictInfo = {
-  match: { tone: 'yes', label: 'AI: no contradiction' },
-  partial: { tone: 'warn', label: 'Unconfirmed claims' },
-  mismatch: { tone: 'no', label: 'Summary mismatch' },
+  match: {
+    tone: 'yes',
+    label: 'AI: no contradiction',
+    help: 'The AI compared the proposer\'s description with what the proposal actually does on-chain and found no conflict. AI can be fooled, so treat it as a hint.',
+  },
+  partial: {
+    tone: 'warn',
+    label: 'Unconfirmed claims',
+    help: 'The description says things the on-chain action cannot prove, usually background or the current state of the protocol. Not necessarily wrong, but check those claims yourself.',
+  },
+  mismatch: {
+    tone: 'no',
+    label: 'Summary mismatch',
+    help: 'The description contradicts what the proposal actually does on-chain, or tries to manipulate the reader. Be very careful.',
+  },
 } as const;
