@@ -122,10 +122,22 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
   );
 }
 
+/** allow only http(s) links — proposal URLs come from anyone who submits a proposal */
+export const safeHref = (h: string) => {
+  try {
+    const u = new URL(h);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export function Ext({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
+  const safe = safeHref(href);
+  if (!safe) return <span className={cx('inline-flex items-center gap-1 text-muted', className)} title="Unsafe link hidden">{children}</span>;
   return (
     <a
-      href={href}
+      href={safe}
       target="_blank"
       rel="noreferrer noopener"
       className={cx('inline-flex items-center gap-1 text-accent hover:underline', className)}

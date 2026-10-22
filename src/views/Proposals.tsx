@@ -176,7 +176,7 @@ export function Proposals({ go }: { go: (h: string) => void }) {
           value={vF}
           onChange={setVF}
           label="AI check"
-          options={[['all', 'AI check: all'], ['match', 'Summary verified'], ['partial', 'Unconfirmed claims'], ['mismatch', 'Summary mismatch'], ['risk', 'Has risks']] as const}
+          options={[['all', 'AI check: all'], ['match', 'AI: no contradiction'], ['partial', 'Unconfirmed claims'], ['mismatch', 'Summary mismatch'], ['risk', 'Has risks']] as const}
         />
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
       </FilterBar>

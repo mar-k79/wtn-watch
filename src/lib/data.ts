@@ -416,7 +416,12 @@ export async function withdrawalById(id: bigint) {
 
 /* ---------------- reproducible build (v2) ---------------- */
 
-export type Build = { commit: string; built_at: string; run_url: string; runner: string; wasms: Record<string, string> };
+export type Build = {
+  commit: string; built_at: string; run_url: string; runner: string; wasms: Record<string, string>;
+  /** false = commit is not on any branch of WaterNeuron/WaterNeuron (e.g. only in a fork) */
+  on_branch?: boolean;
+  on_main?: boolean;
+};
 
 export const isNnsMirror = (fn?: Fn) => !!fn && /nns proposal/i.test(fn.name);
 

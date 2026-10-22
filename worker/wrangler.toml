@@ -12,3 +12,13 @@ MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 [[kv_namespaces]]
 binding = "EXPLAIN"
 id = "9a92c87bb8ae47d9959e17bf338b13c2"
+
+[[ratelimits]]
+name = "RL"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "RL_AI"
+namespace_id = "1002"
+simple = { limit = 6, period = 60 }

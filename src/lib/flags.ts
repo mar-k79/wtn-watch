@@ -60,6 +60,8 @@ export async function computeFlags(p: ProposalData, verdict?: Verdict): Promise<
         ? { level: 'red', title: 'Canister upgrade without published code', text: 'The proposal does not say which source code the new program comes from, so nobody can check what it does.' }
         : !build || !wasm
           ? { level: 'orange', title: 'Canister upgrade not verified yet', text: 'The new program has not been rebuilt independently from the published code yet.' }
+          : build.on_branch === false
+            ? { level: 'red', title: 'Source commit is not in the official repo', text: 'The stated commit is not on any branch of WaterNeuron/WaterNeuron (it may come from a fork). Matching code alone proves nothing here.' }
           : built === wasm
             ? { level: 'green', title: 'Canister upgrade matches published code', text: 'We rebuilt the program from the public source and got exactly the same file.' }
             : { level: 'red', title: 'Upgrade does NOT match the published code', text: 'Rebuilding from the stated source gives a different program. Treat as unsafe until explained.' },
@@ -138,7 +140,7 @@ export async function computeFlags(p: ProposalData, verdict?: Verdict): Promise<
   if (verdict)
     flags.push(
       verdict.consistency === 'match'
-        ? { level: 'green', title: 'Description matches the action', text: 'What the proposer wrote agrees with what the proposal actually does.' }
+        ? { level: 'green', title: 'AI found no contradiction', text: 'The AI check found no conflict between the description and the on-chain action. AI can be fooled, so treat this as a hint.' }
         : verdict.consistency === 'mismatch'
           ? { level: 'red', title: 'Description contradicts the action', text: 'The text says something different from what the proposal actually does.' }
           : { level: 'orange', title: 'Some claims cannot be checked', text: 'Parts of the description are not visible in the on-chain action.' },

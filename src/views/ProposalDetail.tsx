@@ -231,7 +231,7 @@ function UpgradeVerify({
     },
     {
       label: 'Independent Nix build',
-      state: !wasmHash || !claims.commit || !name ? 'na' : !build ? 'na' : built === wasmHash ? 'ok' : 'fail',
+      state: !wasmHash || !claims.commit || !name ? 'na' : !build ? 'na' : build.on_branch === false ? 'fail' : built === wasmHash ? 'ok' : 'fail',
       detail: !name ? (
         'Unknown target canister'
       ) : !claims.commit ? (
@@ -247,6 +247,7 @@ function UpgradeVerify({
       ) : (
         <span>
           <Mono>{built ? short(built, 10) : `no ${name} artifact`}</Mono> · <Ext href={build.run_url}>CI run</Ext>
+          {build.on_branch === false && <span className="ml-1 font-medium text-no">· commit not in official repo (fork?)</span>}
         </span>
       ),
     },

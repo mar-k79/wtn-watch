@@ -18,7 +18,7 @@ export async function fetchVerdicts(ids: bigint[]): Promise<Record<string, Verdi
 }
 
 export const verdictInfo = {
-  match: { tone: 'yes', label: 'Summary verified' },
+  match: { tone: 'yes', label: 'AI: no contradiction' },
   partial: { tone: 'warn', label: 'Unconfirmed claims' },
   mismatch: { tone: 'no', label: 'Summary mismatch' },
 } as const;

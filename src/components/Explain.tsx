@@ -44,7 +44,7 @@ function Block({ t, icon: Icon, title, items }: { t: keyof typeof tone; icon: ty
 }
 
 const verdict = {
-  match: { t: 'yes', icon: CheckCircle2, label: 'Summary matches the on-chain action' },
+  match: { t: 'yes', icon: CheckCircle2, label: 'AI found no contradiction with the on-chain action' },
   partial: { t: 'warn', icon: AlertTriangle, label: 'Summary makes claims the payload does not confirm' },
   mismatch: { t: 'no', icon: XCircle, label: 'Summary contradicts the on-chain action' },
 } as const;

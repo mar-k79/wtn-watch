@@ -51,6 +51,8 @@ export async function proposalReport(p: ProposalData) {
         ? '⚠️ No source commit in summary'
         : !build
           ? `Source commit ${claims.commit.slice(0, 12)} — not yet reproduced`
+          : build.on_branch === false
+            ? `❌ Commit ${claims.commit.slice(0, 12)} is not in the official repo (fork?)`
           : built === wasm
             ? `✅ Reproduced from commit ${claims.commit.slice(0, 12)} (${build.run_url})`
             : `❌ Build of ${claims.commit.slice(0, 12)} gives ${built?.slice(0, 12) ?? 'no artifact'} — does NOT match`,
