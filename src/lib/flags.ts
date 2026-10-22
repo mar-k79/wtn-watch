@@ -59,7 +59,7 @@ export async function computeFlags(p: ProposalData, verdict?: Verdict): Promise<
       !claims.commit
         ? { level: 'red', title: 'Canister upgrade without published code', text: 'The proposal does not say which source code the new program comes from, so nobody can check what it does.' }
         : !build || !wasm
-          ? { level: 'orange', title: 'Canister upgrade not verified yet', text: 'The new program has not been rebuilt independently from the published code yet.' }
+          ? { level: 'orange', title: 'Canister upgrade not verified yet', text: 'The new program has not been rebuilt from the published code yet. An independent build starts automatically within about an hour.' }
           : build.on_branch === false
             ? { level: 'red', title: 'Source commit is not in the official repo', text: 'The stated commit is not on any branch of WaterNeuron/WaterNeuron (it may come from a fork). Matching code alone proves nothing here.' }
           : built === wasm

@@ -1,0 +1,60 @@
+name: Watch WTN upgrade proposals
+
+# every hour: find new UpgradeSnsControlledCanister proposals and build their source commit
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watch-upgrades
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Find unbuilt upgrade commits
+        id: find
+        run: |
+          node scripts/find-upgrades.mjs > todo.txt
+          cat todo.txt
+          echo "count=$(grep -cE '^[0-9a-f]{40}$' todo.txt || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch builds
+        if: steps.find.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - << 'PY'
+          import json, os, time
+          q = json.load(open('builds/queue.json')) if os.path.exists('builds/queue.json') else {}
+          for c in open('todo.txt').read().split():
+              q[c] = int(time.time() * 1000)
+          json.dump(q, open('builds/queue.json', 'w'), indent=2, sort_keys=True)
+          PY
+          while read -r c; do
+            printf '%s' "$c" | grep -Eqx '[0-9a-f]{40}' || continue
+            gh workflow run build-wtn.yml -R "$GITHUB_REPOSITORY" -f commit="$c"
+            echo "queued $c"
+          done < todo.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add builds/queue.json
+          git commit -m "watch: queue upgrade builds" || exit 0
+          for i in 1 2 3; do git pull --rebase -X theirs && git push && break; sleep 5; done

@@ -84,10 +84,10 @@ jobs:
       - name: Rebuild index
         run: |
           python3 - << 'PY'
-          import json, glob, os
+          import json, glob, os, re
           idx = {}
           for f in sorted(glob.glob('builds/*.json')):
-              if os.path.basename(f) == 'index.json':
+              if not re.fullmatch(r'[0-9a-f]{40}\.json', os.path.basename(f)):
                   continue
               b = json.load(open(f))
               for name, h in b['wasms'].items():

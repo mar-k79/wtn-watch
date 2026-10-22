@@ -242,7 +242,7 @@ function UpgradeVerify({
         <span>Fetch failed · <button className="underline" onClick={reload}>retry</button></span>
       ) : !build ? (
         <span>
-          Not built yet · <Ext href={buildDispatchUrl()}>run workflow</Ext> with commit <Mono>{claims.commit.slice(0, 12)}</Mono>
+          Not built yet · queued automatically (checked every hour) · <Ext href={buildDispatchUrl()}>status</Ext>
         </span>
       ) : (
         <span>
