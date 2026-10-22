@@ -4,6 +4,7 @@ import { fetchExplain, fetchVerdicts, verdictInfo, type Verdict } from '../lib/e
 import { AlertTriangle } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ProposalModal } from '../components/ProposalModal';
+import { preflightFor, type Flag } from '../lib/flags';
 import { ChevronRight, Clock, Sparkles } from 'lucide-react';
 import type { ProposalData } from '../declarations/sns_governance';
 import { actionKey, deadline, functions, genericCall, isNnsMirror, listProposals, mirrorIds, status, type Fn, type Status } from '../lib/data';
@@ -28,6 +29,23 @@ export function Proposals({ go }: { go: (h: string) => void }) {
   const [to, setTo] = useState('');
   const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
   const [modal, setModal] = useState<ProposalData>();
+  const [pre, setPre] = useState<Record<string, Flag>>({});
+
+  // will an open proposal's call actually succeed today? (only state-dependent WaterNeuron methods)
+  useEffect(() => {
+    if (!fns) return;
+    let stop = false;
+    items
+      .filter((p) => p.decided_timestamp_seconds === 0n)
+      .forEach(async (p) => {
+        const g = genericCall(p);
+        const f = await preflightFor(p, g && fns.get(g.function_id)?.method).catch(() => undefined);
+        if (f && !stop) setPre((cur) => ({ ...cur, [String(opt(p.id)!.id)]: f }));
+      });
+    return () => {
+      stop = true;
+    };
+  }, [items, fns]);
   const [hideMirror, setHideMirror] = useState(() => {
     try {
       return localStorage.getItem('hide-mirror') !== '0';
@@ -190,7 +208,7 @@ export function Proposals({ go }: { go: (h: string) => void }) {
 
       <Card className="divide-y divide-line overflow-hidden">
         {shown.map((p, i) => (
-          <Row key={String(opt(p.id)?.id)} p={p} fns={fns} i={i} v={verdicts[String(opt(p.id)?.id)]} onOpen={() => setModal(p)} />
+          <Row key={String(opt(p.id)?.id)} p={p} fns={fns} i={i} v={verdicts[String(opt(p.id)?.id)]} pf={pre[String(opt(p.id)?.id)]} onOpen={() => setModal(p)} />
         ))}
         {loading &&
           Array.from({ length: items.length ? 2 : 6 }, (_, i) => (
@@ -222,7 +240,7 @@ export function Proposals({ go }: { go: (h: string) => void }) {
   );
 }
 
-function Row({ p, fns, i, v, onOpen }: { p: ProposalData; fns?: Map<bigint, Fn>; i: number; v?: Verdict; onOpen: () => void }) {
+function Row({ p, fns, i, v, pf, onOpen }: { p: ProposalData; fns?: Map<bigint, Fn>; i: number; v?: Verdict; pf?: Flag; onOpen: () => void }) {
   const id = opt(p.id)?.id;
   const s = status(p);
   const t = opt(p.latest_tally);
@@ -250,6 +268,11 @@ function Row({ p, fns, i, v, onOpen }: { p: ProposalData; fns?: Map<bigint, Fn>;
             <Badge tone={statusTone(s)}>{s}</Badge>
             <Badge>{fn ? fn.name : humanize(actionKey(p))}</Badge>
             {fn?.method && <Badge className="font-mono">{fn.method}</Badge>}
+            {pf && pf.level !== 'green' && (
+              <Badge tone={pf.level === 'red' ? 'no' : 'warn'}>
+                <AlertTriangle className="size-3" /> {pf.level === 'red' ? 'Will fail' : pf.title}
+              </Badge>
+            )}
             {v && <Badge tone={verdictInfo[v.consistency]?.tone ?? 'warn'}>{verdictInfo[v.consistency]?.label ?? v.consistency}</Badge>}
             {v && v.risks > 0 && (
               <Badge tone="no">

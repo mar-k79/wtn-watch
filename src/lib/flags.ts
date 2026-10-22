@@ -9,6 +9,46 @@ import { DAY, hex, icp, opt, sha256 } from './format';
 import type { Verdict } from './explain';
 
 export type Level = 'red' | 'orange' | 'green';
+
+/** WaterNeuron methods whose success depends on the main neuron's current state (mirrors the canister's own checks) */
+const MIN_DELAY_DAYS = 14;
+const PREFLIGHT = new Set(['set_main_neuron_to_min_dissolve_delay', 'stop_dissolving_main_neuron', 'start_dissolving_main_neuron']);
+
+let mainCache: Promise<{ delayD: number; dissolving: boolean } | null> | null = null;
+const mainState = () =>
+  (mainCache ??= (async () => {
+    const id6 = opt((await wnInfo()).neuron_id_6m)?.id;
+    const n = id6 !== undefined ? await nnsNeuron(id6) : null;
+    setTimeout(() => (mainCache = null), 60_000);
+    return n ? { delayD: Number(n.dissolve_delay_seconds) / DAY, dissolving: n.state === 2 } : null;
+  })().catch(() => (mainCache = null)));
+
+/** preflight for list badges: returns a flag only for open proposals calling a state-dependent method */
+export async function preflightFor(p: ProposalData, method?: string): Promise<Flag | undefined> {
+  if (p.decided_timestamp_seconds !== 0n || !method || !PREFLIGHT.has(method)) return undefined;
+  const m = await mainState();
+  return m ? preflight(method, m.delayD, m.dissolving) : undefined;
+}
+
+function preflight(method: string, delayD: number, dissolving: boolean): Flag | undefined {
+  const d = delayD.toFixed(1);
+  if (method === 'set_main_neuron_to_min_dissolve_delay') {
+    if (dissolving)
+      return { level: 'red', title: 'Will fail with today\'s state', text: `The main neuron is still dissolving. This call only works on a neuron that is not dissolving, so it would return an error.` };
+    if (delayD >= MIN_DELAY_DAYS)
+      return { level: 'red', title: 'Will fail with today\'s state', text: `The main neuron's lock time is already ${d} days. This call can only raise it up to ${MIN_DELAY_DAYS} days, never lower it, so it would return an error and change nothing.` };
+    return { level: 'green', title: 'Preconditions met', text: `Main neuron is not dissolving and its lock time (${d} d) is below ${MIN_DELAY_DAYS} days, so the call can raise it to ${MIN_DELAY_DAYS} days.` };
+  }
+  if (method === 'stop_dissolving_main_neuron')
+    return dissolving
+      ? { level: 'green', title: 'Preconditions met', text: `The main neuron is dissolving (${d} d left), so stopping it is possible.` }
+      : { level: 'red', title: 'Will fail with today\'s state', text: `The main neuron is already not dissolving (lock ${d} d). Stopping it again would return an error.` };
+  if (method === 'start_dissolving_main_neuron')
+    return dissolving
+      ? { level: 'red', title: 'Will fail with today\'s state', text: `The main neuron is already dissolving (${d} d left).` }
+      : { level: 'orange', title: 'Starts dissolving the main neuron', text: `The main neuron (lock ${d} d) would start counting down. While dissolving it earns no voting rewards.` };
+  return undefined;
+}
 export type Flag = { level: Level; title: string; text: string };
 
 let histCache: Promise<ProposalData[]> | null = null;
@@ -114,6 +154,13 @@ export async function computeFlags(p: ProposalData, verdict?: Verdict): Promise<
         });
       }
     } catch {}
+  }
+
+  /* --- preflight: will the call actually succeed with today's on-chain state? (open proposals only) --- */
+  const method = fnInfo?.method;
+  if (p.decided_timestamp_seconds === 0n && method && PREFLIGHT.has(method)) {
+    const f = await preflightFor(p, method).catch(() => undefined);
+    if (f) flags.push(f);
   }
 
   /* --- who proposed it --- */
