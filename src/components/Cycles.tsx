@@ -16,7 +16,7 @@ export function CyclesCard({ tick }: { tick: number }) {
   return (
     <Card>
       <CardHeader
-        title={<span className="inline-flex items-center gap-2"><Cpu className="size-4 text-muted" /> Canister cycles</span>}
+        title={<span className="inline-flex items-center gap-2"><Cpu className="size-4 text-accent" /> Canister cycles</span>}
         sub={
           data
             ? `${rows.length} DAO canisters · updated ${relative(data.at / 1000)} · shared 15-min cache (each check costs the DAO root cycles)`

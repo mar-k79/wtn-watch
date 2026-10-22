@@ -5,7 +5,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cx('rounded-xl border border-line bg-panel shadow-[0_1px_2px_rgba(0,0,0,0.04)]', className)}>
+    <div className={cx('shadow-card rounded-2xl border border-line bg-panel/90 backdrop-blur-sm', className)}>
       {children}
     </div>
   );
@@ -25,16 +25,16 @@ export function CardHeader({ title, sub, right }: { title: ReactNode; sub?: Reac
 
 type Tone = 'neutral' | 'yes' | 'no' | 'warn' | 'accent';
 const tones: Record<Tone, string> = {
-  neutral: 'bg-fg/5 text-muted',
-  yes: 'bg-yes/10 text-yes',
-  no: 'bg-no/10 text-no',
-  warn: 'bg-warn/10 text-warn',
-  accent: 'bg-accent/10 text-accent',
+  neutral: 'bg-fg/[0.05] text-muted ring-fg/10',
+  yes: 'bg-yes/10 text-yes ring-yes/25',
+  no: 'bg-no/10 text-no ring-no/25',
+  warn: 'bg-warn/10 text-warn ring-warn/25',
+  accent: 'bg-accent/10 text-accent ring-accent/25',
 };
 
 export function Badge({ children, tone = 'neutral', className }: { children: ReactNode; tone?: Tone; className?: string }) {
   return (
-    <span className={cx('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium', tones[tone], className)}>
+    <span className={cx('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset', tones[tone], className)}>
       {children}
     </span>
   );
@@ -63,8 +63,8 @@ export function Button({
       className={cx(
         'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-colors',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50',
-        variant === 'primary' && 'bg-fg text-bg hover:bg-fg/90',
-        variant === 'default' && 'border border-line bg-panel hover:bg-fg/5',
+        variant === 'primary' && 'brand-gradient text-white shadow-[0_4px_14px_-4px_var(--accent)] hover:brightness-110',
+        variant === 'default' && 'border border-line bg-panel hover:border-accent/40 hover:bg-accent/[0.06] hover:text-accent',
         variant === 'ghost' && 'text-muted hover:bg-fg/5 hover:text-fg',
         className,
       )}
@@ -77,7 +77,10 @@ export function Button({
 export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone }) {
   return (
     <div className="px-5 py-4">
-      <div className="text-xs text-muted">{label}</div>
+      <div className="flex items-center gap-1.5 text-xs text-muted">
+        <span className={cx('size-1.5 rounded-full', tone === 'no' ? 'bg-no' : tone === 'warn' ? 'bg-warn' : tone === 'yes' ? 'bg-yes' : 'brand-gradient')} />
+        {label}
+      </div>
       <div
         className={cx(
           'tabular mt-1 text-xl font-semibold tracking-tight',

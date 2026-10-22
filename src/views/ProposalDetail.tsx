@@ -125,7 +125,7 @@ function ActionPanel({ p, fns }: { p: ProposalData; fns?: Map<bigint, Fn> }) {
       <CardHeader
         title={
           <span className="inline-flex items-center gap-2">
-            <Code2 className="size-4 text-muted" />
+            <Code2 className="size-4 text-accent" />
             {fn ? fn.name : humanize(actionKey(p))}
           </span>
         }
@@ -289,7 +289,7 @@ function UpgradeVerify({
   ];
 
   const icon = (s: Check['state']) =>
-    s === 'ok' ? <CheckCircle2 className="size-4 text-yes" /> : s === 'fail' ? <XCircle className="size-4 text-no" /> : <CircleDashed className="size-4 text-muted" />;
+    s === 'ok' ? <CheckCircle2 className="size-4 text-yes" /> : s === 'fail' ? <XCircle className="size-4 text-no" /> : <CircleDashed className="size-4 text-accent" />;
   const verified = checks[1].state === 'ok';
 
   return (
@@ -350,7 +350,7 @@ function Voting({ p }: { p: ProposalData }) {
       <CardHeader
         title={
           <span className="inline-flex items-center gap-2">
-            <Scale className="size-4 text-muted" /> Voting
+            <Scale className="size-4 text-accent" /> Voting
           </span>
         }
         sub={`Thresholds: yes > ${r.exercised / 100}% of cast · yes ≥ ${r.total / 100}% of total VP`}

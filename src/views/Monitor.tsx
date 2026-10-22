@@ -145,7 +145,7 @@ export function Monitor() {
 
       {d && (
         <Card>
-          <CardHeader title={<span className="inline-flex items-center gap-2"><Activity className="size-4 text-muted" /> Protocol neurons</span>} />
+          <CardHeader title={<span className="inline-flex items-center gap-2"><Activity className="size-4 text-accent" /> Protocol neurons</span>} />
           <div className="divide-y divide-line text-sm">
             {[
               ['6-month', d.id6, d.n6],
@@ -363,7 +363,7 @@ function Watcher() {
       <CardHeader
         title={
           <span className="inline-flex items-center gap-2">
-            {w.enabled ? <Bell className="size-4 text-accent" /> : <BellOff className="size-4 text-muted" />} Alerts
+            {w.enabled ? <Bell className="size-4 text-accent" /> : <BellOff className="size-4 text-accent" />} Alerts
           </span>
         }
         sub={

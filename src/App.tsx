@@ -65,14 +65,14 @@ export default function App() {
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-line bg-bg/80 backdrop-blur-md">
+      <header className="sticky top-0 z-10 border-b border-line bg-bg/70 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:gap-6 sm:px-6">
           <a href="#/" className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-            <span className="grid size-6 place-items-center rounded-md bg-fg text-bg">
+            <span className="brand-gradient grid size-7 place-items-center rounded-lg text-white shadow-[0_4px_12px_-3px_var(--accent)]">
               <Droplets className="size-3.5" />
             </span>
             <span className="flex flex-col leading-none">
-              <span>WTN Watch</span>
+              <span className="text-brand">WTN Watch</span>
               <span className="mt-0.5 text-[10px] font-normal tracking-normal text-muted">independent verifier</span>
             </span>
           </a>
@@ -84,12 +84,12 @@ export default function App() {
                 aria-current={active === h ? 'page' : undefined}
                 className={cx(
                   'relative rounded-md px-2.5 py-1.5 transition-colors',
-                  active === h ? 'text-fg' : 'text-muted hover:text-fg',
+                  active === h ? 'text-fg font-medium' : 'text-muted hover:text-fg',
                 )}
               >
                 {label}
                 {active === h && (
-                  <motion.span layoutId="tab" className="absolute inset-x-2 -bottom-[11px] h-px bg-fg" />
+                  <motion.span layoutId="tab" className="brand-gradient absolute inset-x-2 -bottom-[11px] h-0.5 rounded-full" />
                 )}
               </a>
             ))}
@@ -136,7 +136,7 @@ export default function App() {
             aria-current={active === h ? 'page' : undefined}
             className={cx(
               'flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
-              active === h ? 'text-fg' : 'text-muted',
+              active === h ? 'text-accent' : 'text-muted',
             )}
           >
             <Icon className="size-5" />
