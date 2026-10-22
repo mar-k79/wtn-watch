@@ -393,6 +393,11 @@ export async function enrich(ws: WithdrawalDetails[]): Promise<WRow[]> {
   });
 }
 
+/** every withdrawal ever made; NNS state is only fetched for the ones still open */
+export async function allWithdrawalRows() {
+  return enrich(await allWithdrawals());
+}
+
 export async function openWithdrawals() {
   return enrich((await allWithdrawals()).filter((w) => OPEN.includes(variantKey(w.status)!)));
 }

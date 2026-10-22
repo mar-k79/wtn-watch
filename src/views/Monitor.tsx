@@ -1,7 +1,7 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { DateRange, FilterBar, inRange, NumberInput, SearchInput, Select, SortHeader, type Sort } from '../components/Filters';
 import { AlertTriangle, Activity, Bell, BellOff, RefreshCw, ShieldCheck } from 'lucide-react';
-import { buildsIndex, canisterHealth, neuronState, refreshInfo, nnsNeuron, openWithdrawals, resetWithdrawals, wnInfo, type WRow } from '../lib/data';
+import { allWithdrawalRows, buildsIndex, canisterHealth, neuronState, refreshInfo, nnsNeuron, openWithdrawals, resetWithdrawals, wnInfo, type WRow } from '../lib/data';
 import { statusReport } from '../lib/report';
 import { clearLog, INTERVAL_MS, runCheck, setWatch, subscribe, watchState } from '../lib/watch';
 import { cycles, date, DAY, days, humanize, icp, opt, relative } from '../lib/format';
@@ -26,6 +26,10 @@ export function Monitor() {
     return openWithdrawals();
   }, [tick]);
   const idx = useAsync(buildsIndex, []);
+  const [showAll, setShowAll] = useState(false);
+  const hist = useAsync(async () => (showAll ? allWithdrawalRows() : null), [showAll, tick]);
+  const tableRows = showAll ? hist.data : wd.data;
+  const tableErr = showAll ? hist.error : wd.error;
 
   const d = core.data;
   const mainDelay = Number(d?.n6?.dissolve_delay_seconds ?? 0n);
@@ -192,18 +196,30 @@ export function Monitor() {
 
       <Card>
         <CardHeader
-          title="Open withdrawals"
-          sub="WaterNeuron status vs. actual NNS neuron state. Frozen = waiting for dissolvement but NNS says locked."
-          right={frozen.length ? <Badge tone="warn">{frozen.length} frozen</Badge> : <Badge tone="yes"><ShieldCheck className="size-3" /> none frozen</Badge>}
+          title={showAll ? 'All withdrawals' : 'Open withdrawals'}
+          sub={
+            showAll
+              ? 'Full history, including completed and cancelled. NNS state is shown only for open ones.'
+              : 'WaterNeuron status vs. actual NNS neuron state. Frozen = waiting for dissolvement but NNS says locked.'
+          }
+          right={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted select-none">
+                <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} className="accent-current" />
+                Show completed
+              </label>
+              {frozen.length ? <Badge tone="warn">{frozen.length} frozen</Badge> : <Badge tone="yes"><ShieldCheck className="size-3" /> none frozen</Badge>}
+            </div>
+          }
         />
-        {wd.error ? (
-          <div className="p-4"><ErrorBox error={wd.error} onRetry={wd.reload} /></div>
-        ) : !wd.data ? (
-          <div className="px-5 py-6"><Spinner label="Scanning withdrawals and NNS neurons…" /></div>
-        ) : !wd.data.length ? (
-          <Empty>No open withdrawals</Empty>
+        {tableErr ? (
+          <div className="p-4"><ErrorBox error={tableErr} onRetry={showAll ? hist.reload : wd.reload} /></div>
+        ) : !tableRows ? (
+          <div className="px-5 py-6"><Spinner label={showAll ? 'Loading full withdrawal history…' : 'Scanning withdrawals and NNS neurons…'} /></div>
+        ) : !tableRows.length ? (
+          <Empty>No withdrawals</Empty>
         ) : (
-          <WTable rows={wd.data} mainDelay={mainDelay} />
+          <WTable rows={tableRows} mainDelay={mainDelay} />
         )}
       </Card>
     </div>
@@ -234,6 +250,7 @@ export function WTable({ rows, mainDelay, filters = true }: { rows: WRow[]; main
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [sort, setSort] = useState<Sort<WKey>>({ key: 'id', dir: 'desc' });
+  const [limit, setLimit] = useState(100);
 
   const wnOpts = useMemo(
     () => [['all', 'WaterNeuron: all'] as const, ...[...new Set(rows.map((r) => r.status))].map((s) => [s, humanize(s)] as const)],
@@ -298,7 +315,7 @@ export function WTable({ rows, mainDelay, filters = true }: { rows: WRow[]; main
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {shown.map((r) => {
+            {shown.slice(0, limit).map((r) => {
               const delay = Number(r.nns?.dissolve_delay_seconds ?? 0n);
               const over = mainDelay !== undefined && r.nns?.state === 1 && delay > mainDelay;
               return (
@@ -308,7 +325,7 @@ export function WTable({ rows, mainDelay, filters = true }: { rows: WRow[]; main
                     {reqSec(r) ? new Date(reqSec(r) * 1000).toLocaleDateString('en-GB') : '—'}
                   </td>
                   <td className="tabular px-3 py-2 text-right">{icp(r.w.request.icp_due)}</td>
-                  <td className="px-3 py-2"><Badge>{humanize(r.status)}</Badge></td>
+                  <td className="px-3 py-2"><Badge tone={r.status === 'ConversionDone' ? 'yes' : r.status === 'Cancelled' || r.status === 'NotFound' ? 'neutral' : 'accent'}>{r.status === 'ConversionDone' ? 'Paid out' : humanize(r.status)}</Badge></td>
                   <td className="px-3 py-2">
                     {r.nns ? (
                       <Badge tone={r.frozen ? 'warn' : r.nns.state === 2 ? 'accent' : r.nns.state === 3 ? 'yes' : 'neutral'}>
@@ -326,6 +343,13 @@ export function WTable({ rows, mainDelay, filters = true }: { rows: WRow[]; main
           </tbody>
         </table>
         {!shown.length && <Empty>No withdrawals match these filters</Empty>}
+        {shown.length > limit && (
+          <div className="flex justify-center p-3">
+            <Button variant="ghost" onClick={() => setLimit((l) => l + 200)}>
+              Show more ({shown.length - limit})
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
