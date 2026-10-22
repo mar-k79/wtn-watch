@@ -1,10 +1,11 @@
 import type { ProposalData } from '../declarations/sns_governance';
 import {
-  actionKey, breakdown, canisterHealth, canisterName, dashboardUrl, deadline, earlyDecision, fetchBuild, functions,
+  actionKey, breakdown, canisterHealth, canisterName, cycleLevel, dashboardUrl, refreshInfo, snsCanisters, deadline, earlyDecision, fetchBuild, functions,
   genericCall, loadLabels, neuronControllers, rules, status, summaryClaims, upgradeCall, wouldPass,
   type WRow,
 } from './data';
-import { compact, cycles, DAY, hex, humanize, icp, opt, pct, relative, sha256 } from './format';
+import { compact, cycles, date, DAY, hex, humanize, icp, opt, pct, relative, sha256 } from './format';
+import type { NeuronInfo } from '../declarations/nns_governance';
 
 export async function proposalReport(p: ProposalData) {
   const id = opt(p.id)!.id;
@@ -69,6 +70,8 @@ export async function statusReport(d: {
   health: Awaited<ReturnType<typeof canisterHealth>>;
   source?: string;
   rows: WRow[];
+  n6?: NeuronInfo | null;
+  n8?: NeuronInfo | null;
 }) {
   const frozen = d.rows.filter((r) => r.frozen);
   const risky = d.rows.filter((r) => r.nns?.state === 1 && Number(r.nns.dissolve_delay_seconds) > d.mainDelay);
@@ -80,6 +83,24 @@ export async function statusReport(d: {
     const runway = d.health.burnPerDay > 0n ? Number(d.health.cycles / d.health.burnPerDay) : undefined;
     lines.push(`Canister: ${cycles(d.health.cycles)} cycles${runway ? ` (~${runway} d runway)` : ''}, module \`${d.health.moduleHash?.slice(0, 12) ?? '?'}\`${d.source ? ` = ${d.source}` : ' (source not verified)'}`);
   }
+  for (const [name, n] of [['8-year', d.n8], ['6-month', d.n6]] as const) {
+    const r = refreshInfo(n);
+    if (!r) continue;
+    lines.push(
+      r.decaying
+        ? `🔴 ${name} neuron missed NNS confirm-following ${Math.floor(-r.daysLeft)} d ago, voting power decaying${r.clearedIn > 0 ? `, followees cleared in ${Math.ceil(r.clearedIn)} d` : ''}`
+        : `${r.level === 'orange' ? '🟠' : '🟢'} ${name} neuron: confirm following within ${Math.ceil(r.daysLeft)} d (last ${date(r.refreshedAt)})`,
+    );
+  }
+  try {
+    const { rows } = await snsCanisters();
+    const low = rows.filter((r) => ['red', 'orange'].includes(cycleLevel(r))).sort((a, b) => (a.runway ?? 0) - (b.runway ?? 0));
+    lines.push(
+      low.length
+        ? `⛽ Low cycles: ${low.map((r) => `${r.name} ${r.cycles !== undefined ? cycles(r.cycles) : '?'} (~${r.runway ?? '?'} d)`).join(', ')}`
+        : `⛽ Cycles: all ${rows.length} DAO canisters healthy (> 90 d runway)`,
+    );
+  } catch {}
   lines.push(`Open withdrawals: ${d.rows.length}, frozen: ${frozen.length}`);
   frozen.forEach((r) =>
     lines.push(`• #${r.w.request.withdrawal_id}: ${icp(r.w.request.icp_due)} ICP, delay ${(Number(r.nns!.dissolve_delay_seconds) / DAY).toFixed(1)} d`),

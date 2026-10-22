@@ -59,6 +59,8 @@ export function Monitor() {
                   health: d.health,
                   source: src ? `commit ${src.commit.slice(0, 12)} (reproduced)` : undefined,
                   rows: wd.data!,
+                  n6: d.n6,
+                  n8: d.n8,
                 })
               }
             />
