@@ -54,6 +54,8 @@ export async function proposalReport(p: ProposalData) {
           ? `Source commit ${claims.commit.slice(0, 12)} — not yet reproduced`
           : build.on_branch === false
             ? `❌ Commit ${claims.commit.slice(0, 12)} is not in the official repo (fork?)`
+          : build.on_main === false
+            ? `⚠️ Commit ${claims.commit.slice(0, 12)} is on a side branch, not main`
           : built === wasm
             ? `✅ Reproduced from commit ${claims.commit.slice(0, 12)} (${build.run_url})`
             : `❌ Build of ${claims.commit.slice(0, 12)} gives ${built?.slice(0, 12) ?? 'no artifact'} — does NOT match`,

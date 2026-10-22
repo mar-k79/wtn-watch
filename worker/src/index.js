@@ -97,6 +97,18 @@ export default {
     const origin = req.headers.get('Origin');
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: { ...cors(origin), 'Access-Control-Allow-Methods': 'GET' } });
+    // admin: drop a cached explanation (e.g. after a successful prompt injection) — curl only, no CORS
+    if (req.method === 'POST' && url.pathname === '/purge') {
+      const id = url.searchParams.get('id') ?? '';
+      const tok = (req.headers.get('Authorization') ?? '').replace(/^Bearer /, '');
+      const enc = new TextEncoder();
+      const a = enc.encode(tok), b = enc.encode(env.ADMIN_TOKEN ?? '');
+      const ok = env.ADMIN_TOKEN && a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
+      if (!ok) return json({ error: 'forbidden' }, 403, null);
+      if (!/^\d{1,9}$/.test(id)) return json({ error: 'bad request' }, 400, null);
+      await Promise.all(Object.keys(LANGS).map((l) => env.EXPLAIN.delete(`${VERSION}:${id}:${l}`)));
+      return json({ purged: id }, 200, null);
+    }
     if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405, origin);
 
     // per-IP rate limit (protects the free AI / KV quota and the DAO root canister)
@@ -247,7 +259,7 @@ export default {
     if (!data && !(typeof raw === 'string' && raw.trim())) return json({ error: 'AI returned an empty answer' }, 502, origin);
     const text = data ? '' : String(raw);
     const body = { id: idStr, lang, model: env.MODEL, data, text, created: new Date().toISOString() };
-    ctx.waitUntil(env.EXPLAIN.put(key, JSON.stringify(body)));
+    ctx.waitUntil(env.EXPLAIN.put(key, JSON.stringify(body), { expirationTtl: 90 * 86400 }));
     return json({ ...body, cached: false }, 200, origin);
   },
 };

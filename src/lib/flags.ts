@@ -102,6 +102,8 @@ export async function computeFlags(p: ProposalData, verdict?: Verdict): Promise<
           ? { level: 'orange', title: 'Canister upgrade not verified yet', text: 'The new program has not been rebuilt from the published code yet. An independent build starts automatically within about an hour.' }
           : build.on_branch === false
             ? { level: 'red', title: 'Source commit is not in the official repo', text: 'The stated commit is not on any branch of WaterNeuron/WaterNeuron (it may come from a fork). Matching code alone proves nothing here.' }
+          : build.on_main === false
+            ? { level: 'orange', title: 'Source commit is not on main', text: 'The stated commit exists in the official repo but only on a side branch, not on main. Ask the team why before trusting it.' }
           : built === wasm
             ? { level: 'green', title: 'Canister upgrade matches published code', text: 'We rebuilt the program from the public source and got exactly the same file.' }
             : { level: 'red', title: 'Upgrade does NOT match the published code', text: 'Rebuilding from the stated source gives a different program. Treat as unsafe until explained.' },
