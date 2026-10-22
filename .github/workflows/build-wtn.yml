@@ -7,7 +7,6 @@ on:
         description: WaterNeuron/WaterNeuron commit (full 40-char sha)
         required: true
 
-# least privilege: read by default, write only in the job that commits results
 permissions:
   contents: read
 
@@ -15,72 +14,98 @@ concurrency:
   group: build-wtn
   cancel-in-progress: false
 
+env:
+  COMMIT: ${{ inputs.commit }}
+
 jobs:
-  build:
+  # provenance is decided in its own job: untrusted build.sh cannot touch these outputs
+  check:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    env:
-      COMMIT: ${{ inputs.commit }}
+    outputs:
+      on_branch: ${{ steps.c.outputs.on_branch }}
+      on_main: ${{ steps.c.outputs.on_main }}
     steps:
-      # input goes through env, never interpolated into the script (no shell injection)
       - name: Validate input
         run: printf '%s' "$COMMIT" | grep -Eqx '[0-9a-f]{40}'
-
-      # actions pinned to full commit SHAs (supply-chain safety)
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: true
-
-      - name: Checkout WaterNeuron
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: WaterNeuron/WaterNeuron
           ref: ${{ inputs.commit }}
           path: wn
           fetch-depth: 0
           persist-credentials: false
-
-      # a SHA from a fork can be checked out through the parent repo — record whether it is really in official history
-      - name: Check commit is on an official branch
+      - id: c
         working-directory: wn
         run: |
           git fetch -q origin '+refs/heads/*:refs/remotes/origin/*'
-          if [ -n "$(git branch -r --contains "$COMMIT" 2>/dev/null)" ]; then echo "ON_BRANCH=true" >> "$GITHUB_ENV"; else echo "ON_BRANCH=false" >> "$GITHUB_ENV"; fi
-          git merge-base --is-ancestor "$COMMIT" origin/main && echo "ON_MAIN=true" >> "$GITHUB_ENV" || echo "ON_MAIN=false" >> "$GITHUB_ENV"
+          [ -n "$(git branch -r --contains "$COMMIT" 2>/dev/null)" ] && echo on_branch=true >> "$GITHUB_OUTPUT" || echo on_branch=false >> "$GITHUB_OUTPUT"
+          git merge-base --is-ancestor "$COMMIT" origin/main && echo on_main=true >> "$GITHUB_OUTPUT" || echo on_main=false >> "$GITHUB_OUTPUT"
 
+  # untrusted code runs here: read-only token, no credentials on disk, only a hash list leaves the job
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Validate input
+        run: printf '%s' "$COMMIT" | grep -Eqx '[0-9a-f]{40}'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: WaterNeuron/WaterNeuron
+          ref: ${{ inputs.commit }}
+          path: wn
+          persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
-
       - name: Build with Nix
         working-directory: wn
         run: ./build.sh
+      - name: Hash
+        run: cd wn/artifacts && sha256sum *.wasm.gz | tee "$RUNNER_TEMP/hashes.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hashes
+          path: ${{ runner.temp }}/hashes.txt
+          retention-days: 7
 
-      - name: Write hashes
+  # trusted: own repo only, write token, never executes WaterNeuron code
+  commit:
+    needs: [check, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hashes
+          path: ${{ runner.temp }}/h
+      - name: Write build record
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ON_BRANCH: ${{ needs.check.outputs.on_branch }}
+          ON_MAIN: ${{ needs.check.outputs.on_main }}
+          HASHES: ${{ runner.temp }}/h/hashes.txt
         run: |
-          cd wn/artifacts
-          sha256sum *.wasm.gz | tee ../../hashes.txt
-          cd ../..
           python3 - << 'PY'
-          import json, os, datetime
+          import json, os, re, datetime
           wasms = {}
-          for line in open('hashes.txt'):
-              h, name = line.split()
-              wasms[name.replace('.wasm.gz', '')] = h
+          for line in open(os.environ['HASHES']):
+              m = re.fullmatch(r'([0-9a-f]{64})\s+\*?([a-z0-9_]{1,64})\.wasm\.gz', line.strip())
+              if not m: raise SystemExit(f'bad hash line: {line!r}')
+              wasms[m.group(2)] = m.group(1)
+          if not wasms or len(wasms) > 30: raise SystemExit('unexpected artifact count')
+          c = os.environ['COMMIT']
+          assert re.fullmatch(r'[0-9a-f]{40}', c)
           out = {
-              'commit': os.environ['COMMIT'],
-              'built_at': datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z',
+              'commit': c,
+              'built_at': datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z'),
               'run_url': os.environ['RUN_URL'],
               'runner': 'ubuntu-22.04 + nix',
               'wasms': wasms,
-              'on_main': os.environ.get('ON_MAIN') == 'true',
-              'on_branch': os.environ.get('ON_BRANCH') == 'true',
+              'on_main': os.environ['ON_MAIN'] == 'true',
+              'on_branch': os.environ['ON_BRANCH'] == 'true',
           }
           os.makedirs('builds', exist_ok=True)
-          json.dump(out, open(f"builds/{os.environ['COMMIT']}.json", 'w'), indent=2)
+          json.dump(out, open(f'builds/{c}.json', 'w'), indent=2)
           PY
-
       - name: Rebuild index
         run: |
           python3 - << 'PY'
@@ -91,10 +116,14 @@ jobs:
                   continue
               b = json.load(open(f))
               for name, h in b['wasms'].items():
-                  idx[h] = {'commit': b['commit'], 'canister': name, 'run_url': b['run_url'], 'on_branch': b.get('on_branch', True)}
+                  prev = idx.get(h)
+                  # never let an unofficial build shadow an official one for the same hash
+                  if prev and prev['on_branch'] and not b.get('on_branch', False):
+                      continue
+                  idx[h] = {'commit': b['commit'], 'canister': name, 'run_url': b['run_url'],
+                            'on_branch': b.get('on_branch', False), 'on_main': b.get('on_main', False)}
           json.dump(idx, open('builds/index.json', 'w'), indent=2, sort_keys=True)
           PY
-
       - name: Commit result
         run: |
           git config user.name "github-actions[bot]"

@@ -37,7 +37,8 @@ export function Monitor() {
   const risky = (wd.data ?? []).filter(
     (r) => r.nns && r.nns.state === 1 && Number(r.nns.dissolve_delay_seconds) > mainDelay,
   );
-  const src = d?.health?.moduleHash ? idx.data?.[d.health.moduleHash] : undefined;
+  const srcAny = d?.health?.moduleHash ? idx.data?.[d.health.moduleHash] : undefined;
+  const src = srcAny && srcAny.on_branch !== false ? srcAny : undefined;
   const runway = d?.health && d.health.burnPerDay > 0n ? Number(d.health.cycles / d.health.burnPerDay) : undefined;
 
   return (

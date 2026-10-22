@@ -7,7 +7,7 @@ const ROOT = 'jmod6-4iaaa-aaaaq-aadkq-cai';
 const CYCLES_TTL = 900; // s — one root call per 15 min for all users (each call costs the DAO's root canister cycles)
 const VERSION = 'v6';
 const LANGS = { en: 'English' };
-const ORIGINS = [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/, /^https:\/\/[a-z0-9-]+\.(icp0\.io|ic0\.app)$/];
+const ORIGINS = [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/, /^https:\/\/qdylx-cqaaa-aaaaf-qha5q-cai\.(icp0\.io|ic0\.app)$/];
 
 const cors = (origin) =>
   origin && ORIGINS.some((r) => r.test(origin))
@@ -167,7 +167,8 @@ export default {
         return json({ ...body, cached: false }, 200, origin);
       } catch (e) {
         if (hit) return json({ ...hit, cached: true, stale: true }, 200, origin);
-        return json({ error: `IC query failed: ${e?.message ?? e}` }, 502, origin);
+        console.error(e);
+        return json({ error: 'IC query failed' }, 502, origin);
       }
     }
     if (url.pathname === '/verdicts' && req.method === 'GET') {
@@ -198,7 +199,7 @@ export default {
 
     const p = await loadProposal(BigInt(idStr)).catch((e) => ({ error: String(e?.message ?? e) }));
     if (!p) return json({ error: 'proposal not found' }, 404, origin);
-    if (p.error) return json({ error: `IC query failed: ${p.error}` }, 502, origin);
+    if (p.error) return (console.error(p.error), json({ error: 'IC query failed' }, 502, origin));
 
     const schema = {
       type: 'object',
@@ -220,7 +221,8 @@ export default {
         () => env.AI.run(env.MODEL, base),
       );
     } catch (e) {
-      return json({ error: `AI failed: ${e?.message ?? e}` }, 502, origin);
+      console.error(e);
+      return json({ error: 'AI failed' }, 502, origin);
     }
     const raw = out?.response ?? out;
     let parsed = null;
