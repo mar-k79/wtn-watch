@@ -4,8 +4,12 @@ import { favoriteRows, favorites, knownNeurons } from '../lib/neuron';
 import { useAsync } from '../lib/useAsync';
 import { compact, opt } from '../lib/format';
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Mono, Skeleton, cx } from '../components/ui';
+import { FilterBar, NumberInput, Select } from '../components/Filters';
 
 type Sort = 'new' | 'vp' | 'stake' | 'name';
+type StateF = 'all' | 'locked' | 'dissolving' | 'dissolved';
+const STATE_OPTS = [['all', 'All states'], ['locked', 'Not dissolving'], ['dissolving', 'Dissolving'], ['dissolved', 'Dissolved']] as const;
+const STATE_NUM: Record<Exclude<StateF, 'all'>, number> = { locked: 1, dissolving: 2, dissolved: 3 };
 
 export function KnownNeurons() {
   const [tab, setTab] = useState<'known' | 'fav'>(() => (location.hash.endsWith('?fav') ? 'fav' : 'known'));
@@ -16,16 +20,29 @@ export function KnownNeurons() {
     history.replaceState(null, '', t === 'fav' ? '#/neuron?fav' : '#/neuron');
   };
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState<Sort>('new');
+  const [sort, setSort] = useState<Sort>('vp');
+  const [stateF, setStateF] = useState<StateF>('all');
+  const [minStake, setMinStake] = useState('');
+  const [minVp, setMinVp] = useState('');
+  const activeFilters = (stateF !== 'all' ? 1 : 0) + (minStake ? 1 : 0) + (minVp ? 1 : 0);
+  const clearFilters = () => { setStateF('all'); setMinStake(''); setMinVp(''); };
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    const r = (data ?? []).filter((x) => !s || x.name.toLowerCase().includes(s) || x.id.includes(s));
+    const ms = Number(minStake) * 1e8;
+    const mv = Number(minVp) * 1e8;
+    const r = (data ?? []).filter((x) => {
+      if (s && !x.name.toLowerCase().includes(s) && !x.id.includes(s)) return false;
+      if (stateF !== 'all' && x.info?.state !== STATE_NUM[stateF]) return false;
+      if (ms > 0 && Number(x.info?.stake_e8s ?? 0n) < ms) return false;
+      if (mv > 0 && Number(x.info ? (opt(x.info.deciding_voting_power) ?? x.info.voting_power) : 0n) < mv) return false;
+      return true;
+    });
     const vp = (x: (typeof r)[number]) => Number(x.info ? (opt(x.info.deciding_voting_power) ?? x.info.voting_power) : 0n);
     return r.sort((a, b) =>
       sort === 'new' ? Number((b.info?.created_timestamp_seconds ?? 0n) - (a.info?.created_timestamp_seconds ?? 0n)) : sort === 'name' ? a.name.localeCompare(b.name) : sort === 'stake' ? Number((b.info?.stake_e8s ?? 0n) - (a.info?.stake_e8s ?? 0n)) : vp(b) - vp(a),
     );
-  }, [data, q, sort]);
+  }, [data, q, sort, stateF, minStake, minVp]);
   const totalVp = useMemo(() => (data ?? []).reduce((s, x) => s + Number(x.info ? (opt(x.info.deciding_voting_power) ?? x.info.voting_power) : 0n), 0), [data]);
 
   const open = (e: FormEvent) => {
@@ -67,14 +84,20 @@ export function KnownNeurons() {
         <Button type="submit" variant="primary" disabled={!/^\d{5,20}$/.test(q.trim())} className="h-10 px-4">Open ID</Button>
       </form>
 
-      {error ? <ErrorBox error={error} onRetry={reload} /> : (
+      <FilterBar active={activeFilters} onClear={clearFilters}>
+        <Select<StateF> value={stateF} onChange={setStateF} options={STATE_OPTS} label="Neuron state" />
+        <NumberInput value={minStake} onChange={setMinStake} placeholder="Min stake ICP" />
+        <NumberInput value={minVp} onChange={setMinVp} placeholder="Min VP" />
+      </FilterBar>
+
+      {error ?<ErrorBox error={error} onRetry={reload} /> : (
         <Card>
           <CardHeader
             title={tab === 'fav' ? `Favorites · ${rows.length}` : loading ? 'Known neurons' : `Known neurons · ${rows.length}`}
             sub={tab === 'fav' ? 'Starred in this browser only — never sent anywhere' : 'Registered on the NNS via Register Known Neuron proposals'}
             right={
               <div className="flex gap-1" role="group" aria-label="Sort">
-                {(['new', 'vp', 'stake', 'name'] as Sort[]).map((k) => (
+                {(['vp', 'stake', 'new', 'name'] as Sort[]).map((k) => (
                   <Button key={k} variant={sort === k ? 'default' : 'ghost'} onClick={() => setSort(k)} className={cx('h-7 px-2', sort === k && 'text-accent')}>
                     {k === 'new' ? 'Newest' : k === 'vp' ? 'Voting power' : k === 'stake' ? 'Stake' : 'Name'}
                   </Button>
@@ -86,7 +109,7 @@ export function KnownNeurons() {
             <div className="space-y-2 p-5">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : !rows.length ? (
             <Empty>
-              {tab === 'fav' && !favCount ? 'No favorites yet — open a neuron and click ☆ to add it here.' : <>No neuron matches “{q}”. Press Enter to open it by ID.</>}
+              {tab === 'fav' && !favCount ? 'No favorites yet — open a neuron and click ☆ to add it here.' : activeFilters && !q ? 'No neuron matches the filters.' : <>No neuron matches “{q}”. Press Enter to open it by ID.</>}
             </Empty>
           ) : (
             <ul className="divide-y divide-line">
