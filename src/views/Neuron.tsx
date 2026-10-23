@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { CloudCheck } from 'lucide-react';
-import { ArrowDownLeft, ArrowUpRight, Download, Info, Lock, RefreshCw, Search, Star, Upload } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, Download, Info, Lock, RefreshCw, Search, Star, Upload } from 'lucide-react';
 import { exportSnaps, importSnaps, pushMySnaps, loadNeuron, localSnaps, myNeuron, mySnaps, myToken, setMyNeuron, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
 import { neuronState } from '../lib/data';
 import { useAsync } from '../lib/useAsync';
@@ -196,7 +196,8 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
   const [q, setQ] = useState(id);
   const [mine, setMine] = useState(() => myNeuron() === id);
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
-  const [limit, setLimit] = useState(30);
+  const [page, setPage] = useState(0);
+  const PAGE = 25;
   const { data, error, loading, reload } = useAsync(() => loadNeuron(id, acc), [id, acc]);
   const [tok, setTok] = useState('');
   const priv = useAsync(() => (mine ? mySnaps(id) : Promise.resolve(null)), [id, mine, tok]);
@@ -308,7 +309,10 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
             ? <span className="inline-flex items-center gap-1"><Lock className="size-3" />Private neuron — not tracked publicly; history is kept only in this browser (one snapshot per visit)</span>
             : data?.archive ? `Hourly snapshots since ${date(data.archive.since)}` : 'Now tracked — reward history starts with the next hourly snapshot'}
           right={
-            <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Filter actions"
+            <select value={filter} onChange={(e) => {
+              setFilter(e.target.value as typeof filter);
+              setPage(0);
+            }} aria-label="Filter actions"
               className="h-8 rounded-lg border border-line bg-panel px-2 text-xs outline-none focus:border-accent">
               {FILTERS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
@@ -333,7 +337,7 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
         {loading ? <div className="space-y-2 p-5">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-6 w-full" />)}</div>
           : !shown.length ? <Empty>No activity recorded yet.</Empty> : (
           <ul className="px-5 py-2">
-            {shown.slice(0, limit).map((e, i) => {
+            {shown.slice(page * PAGE, page * PAGE + PAGE).map((e, i) => {
               const day = new Date(e.t * 1000).toLocaleDateString('en-GB', { dateStyle: 'medium' });
               const head = day !== lastDay ? (lastDay = day) : null;
               return (
@@ -354,10 +358,18 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
                 </li>
               );
             })}
-            {shown.length > limit && (
-              <li className="py-2"><Button variant="ghost" onClick={() => setLimit((l) => l + 50)}>Show more ({shown.length - limit})</Button></li>
-            )}
           </ul>
+        )}
+        {shown.length > PAGE && (
+          <nav className="flex items-center justify-between gap-2 border-t border-line px-5 py-3" aria-label="Activity pages">
+            <Button onClick={() => setPage(0)} disabled={page === 0} className="hidden sm:inline-flex">First</Button>
+            <Button onClick={() => setPage((p) => p - 1)} disabled={page === 0}><ChevronLeft className="size-3.5" />Newer</Button>
+            <span className="tabular text-xs text-muted">
+              Page {page + 1} of {Math.ceil(shown.length / PAGE)} · {shown.length} entries
+            </span>
+            <Button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * PAGE >= shown.length}>Older<ChevronRight className="size-3.5" /></Button>
+            <Button onClick={() => setPage(Math.ceil(shown.length / PAGE) - 1)} disabled={(page + 1) * PAGE >= shown.length} className="hidden sm:inline-flex">Last</Button>
+          </nav>
         )}
       </Card>
       {data?.info && <RewardsInfo id={id} isPrivate={data.isPrivate} mine={mine} extra={priv.data ?? []} onImported={() => setTok((t) => t + ' ')} />}
