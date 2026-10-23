@@ -97,7 +97,8 @@ export function localSnaps(id: string, add?: Snap): Snap[] {
   const list = lsGet<Snap[]>(k, []);
   if (add) {
     const last = list[list.length - 1];
-    const same = last && (['stake', 'maturity', 'staked', 'dd', 'state'] as const).every((f) => Object.is(last[f], add[f]) || (f === 'dd' && Math.abs(last.dd - add.dd) <= 86_400));
+    const near = (a: number | null, b: number | null) => a === b || (a != null && b != null && Math.abs(a - b) < 1e-4);
+    const same = last && near(last.stake, add.stake) && near(last.maturity, add.maturity) && near(last.staked, add.staked) && last.state === add.state && Math.abs(last.dd - add.dd) <= 86_400;
     if (!same) {
       list.push(add);
       while (list.length > 2000) list.shift();

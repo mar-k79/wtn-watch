@@ -121,7 +121,8 @@ async function snapMyNeuron(env) {
   };
   const snaps = (await env.EXPLAIN.get('my:snaps', 'json')) ?? [];
   const last = snaps[snaps.length - 1];
-  const same = last && last.stake === s.stake && last.staked === s.staked && last.state === s.state && (s.state !== 1 || Math.abs(last.dd - s.dd) <= 86_400);
+  const near = (a, b) => Math.abs(a - b) < 1e-4; // ignore rounding dust (e.g. imported vs live values)
+  const same = last && near(last.stake, s.stake) && near(last.staked, s.staked) && last.state === s.state && (s.state !== 1 || Math.abs(last.dd - s.dd) <= 86_400);
   if (same) return;
   snaps.push(s);
   while (snaps.length > 5000) snaps.shift();

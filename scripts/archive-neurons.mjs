@@ -81,7 +81,7 @@ for (const id of all) {
   };
   const last = a.snaps[a.snaps.length - 1];
   // dissolve delay of a dissolving neuron ticks down every second → only state/large jumps count
-  const diff = !last || KEYS.some((k) => (k === 'dd' ? Math.abs(s.dd - last.dd) > 86_400 && s.state === 1 : s[k] !== last[k]));
+  const diff = !last || KEYS.some((k) => (k === 'dd' ? Math.abs(s.dd - last.dd) > 86_400 && s.state === 1 : k === 'state' ? s.state !== last.state : s[k] == null || last[k] == null ? s[k] !== last[k] : Math.abs(s[k] - last[k]) >= 1e-4));
   if (!diff) continue;
   a.snaps.push(s);
   while (a.snaps.length > 3000) a.snaps.shift();

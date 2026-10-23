@@ -153,7 +153,7 @@ function events(snaps: Snap[], flows: Flow[]): Ev[] {
   for (let i = 1; i < snaps.length; i++) {
     const a = snaps[i - 1], b = snaps[i];
     const ch = (k: 'staked' | 'maturity' | 'stake', label: string, kind: Ev['kind']) => {
-      if (a[k] == null || b[k] == null || Number.isNaN(a[k]) || Number.isNaN(b[k]) || Math.abs(b[k] - a[k]) < 1e-8) return;
+      if (a[k] == null || b[k] == null || Number.isNaN(a[k]) || Number.isNaN(b[k]) || Math.abs(b[k] - a[k]) < 1e-4) return; // ignore rounding dust between sources
       out.push({ t: b.t, kind, delta: b[k] - a[k], base: a[k], text: <>{label} {b[k] > a[k] ? 'increased' : 'decreased'} from <b>{n2(a[k])}</b> to <b>{n2(b[k])}</b> ICP</> });
     };
     ch('staked', 'Staked maturity', 'maturity');
