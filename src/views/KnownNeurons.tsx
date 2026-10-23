@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { ChevronRight, Search } from 'lucide-react';
-import { knownNeurons, myNeuron } from '../lib/neuron';
+import { ChevronRight, Search, Star } from 'lucide-react';
+import { favoriteRows, favorites, knownNeurons } from '../lib/neuron';
 import { useAsync } from '../lib/useAsync';
 import { compact, opt } from '../lib/format';
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Mono, Skeleton, cx } from '../components/ui';
@@ -8,7 +8,13 @@ import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Mono, Skeleton, cx } 
 type Sort = 'vp' | 'stake' | 'name';
 
 export function KnownNeurons() {
-  const { data, error, loading, reload } = useAsync(knownNeurons, []);
+  const [tab, setTab] = useState<'known' | 'fav'>(() => (location.hash.endsWith('?fav') ? 'fav' : 'known'));
+  const favCount = favorites().length;
+  const { data, error, loading, reload } = useAsync(() => (tab === 'fav' ? favoriteRows() : knownNeurons()), [tab]);
+  const pick = (t: 'known' | 'fav') => {
+    setTab(t);
+    history.replaceState(null, '', t === 'fav' ? '#/neuron?fav' : '#/neuron');
+  };
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('vp');
 
@@ -35,7 +41,20 @@ export function KnownNeurons() {
           <h1 className="text-lg font-semibold tracking-tight">Neurons</h1>
           <p className="text-sm text-muted">Known NNS neurons, or open any neuron by ID. Public neurons get an hourly reward history; private ones stay in your browser.</p>
         </div>
-        {myNeuron() && <a href={`#/neuron/${myNeuron()}`} className="text-sm text-accent hover:underline">My neuron →</a>}
+        <div className="inline-flex rounded-lg border border-line bg-panel p-0.5" role="tablist" aria-label="Neuron lists">
+          {([['known', 'Known'], ['fav', `Favorites${favCount ? ` · ${favCount}` : ''}`]] as const).map(([k, l]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={tab === k}
+              onClick={() => pick(k)}
+              className={cx('inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors', tab === k ? 'bg-accent/10 text-accent' : 'text-muted hover:text-fg')}
+            >
+              {k === 'fav' && <Star className={cx('size-3.5', tab === k && 'fill-current')} />}
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
 
       <form onSubmit={open} className="flex gap-2">
@@ -51,8 +70,8 @@ export function KnownNeurons() {
       {error ? <ErrorBox error={error} onRetry={reload} /> : (
         <Card>
           <CardHeader
-            title={loading ? 'Known neurons' : `Known neurons · ${rows.length}`}
-            sub="Registered on the NNS via Register Known Neuron proposals"
+            title={tab === 'fav' ? `Favorites · ${rows.length}` : loading ? 'Known neurons' : `Known neurons · ${rows.length}`}
+            sub={tab === 'fav' ? 'Starred in this browser only — never sent anywhere' : 'Registered on the NNS via Register Known Neuron proposals'}
             right={
               <div className="flex gap-1" role="group" aria-label="Sort">
                 {(['vp', 'stake', 'name'] as Sort[]).map((k) => (
@@ -66,7 +85,9 @@ export function KnownNeurons() {
           {loading ? (
             <div className="space-y-2 p-5">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : !rows.length ? (
-            <Empty>No neuron matches “{q}”. Press Enter to open it by ID.</Empty>
+            <Empty>
+              {tab === 'fav' && !favCount ? 'No favorites yet — open a neuron and click ☆ to add it here.' : <>No neuron matches “{q}”. Press Enter to open it by ID.</>}
+            </Empty>
           ) : (
             <ul className="divide-y divide-line">
               {rows.map((r) => {

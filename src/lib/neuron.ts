@@ -27,6 +27,22 @@ export const setMyNeuron = (id: string | undefined) => {
     id ? localStorage.setItem(LS_MY, JSON.stringify(id)) : localStorage.removeItem(LS_MY);
   } catch {}
 };
+/* favorites: several neurons, per browser (the old single "my neuron" is migrated in) */
+const LS_FAV = 'wtn-fav-neurons';
+export const favorites = (): string[] => {
+  const f = lsGet<string[]>(LS_FAV, []).filter((x) => /^\d{1,20}$/.test(x));
+  const old = myNeuron();
+  return old && !f.includes(old) ? [old, ...f] : f;
+};
+export const isFavorite = (id: string) => favorites().includes(id);
+export function toggleFavorite(id: string): boolean {
+  const f = favorites();
+  const next = f.includes(id) ? f.filter((x) => x !== id) : [...f, id];
+  lsSet(LS_FAV, next);
+  if (myNeuron() && !next.includes(myNeuron()!)) setMyNeuron(undefined);
+  return next.includes(id);
+}
+
 /** merge a backup into this browser's history; returns how many new snapshots were added */
 export function importSnaps(id: string, raw: unknown): number {
   const j = raw as { neuron?: unknown; snaps?: unknown };
@@ -228,6 +244,17 @@ export async function knownNeurons(): Promise<KnownRow[]> {
     if (x && 'Ok' in x) r.info = x.Ok;
   });
   return rows;
+}
+
+/** favorites with their live info (query calls, free) */
+export async function favoriteRows(): Promise<KnownRow[]> {
+  const gov = await nnsGov();
+  return pool(favorites(), 6, async (id) => {
+    const r = await gov.get_neuron_info(BigInt(id)).catch(() => null);
+    const info = r && 'Ok' in r ? r.Ok : undefined;
+    const d = info && opt(info.known_neuron_data);
+    return { id, name: d?.name ?? (info && opt(info.visibility) === 2 ? 'Public neuron' : 'Private neuron'), description: d ? opt(d.description) : undefined, links: [], info };
+  });
 }
 
 /** everything is a query call (free) — no cycles are spent by WTN Watch */

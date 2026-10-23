@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { CloudCheck } from 'lucide-react';
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, Download, Info, Lock, RefreshCw, Search, Star, Upload } from 'lucide-react';
-import { exportSnaps, importSnaps, pushMySnaps, loadNeuron, localSnaps, myNeuron, mySnaps, myToken, setMyNeuron, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
+import { exportSnaps, importSnaps, pushMySnaps, loadNeuron, localSnaps, isFavorite, mySnaps, myToken, toggleFavorite, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
 import { neuronState } from '../lib/data';
 import { useAsync } from '../lib/useAsync';
 import { date, opt, short } from '../lib/format';
@@ -130,7 +130,7 @@ function RewardsInfo({ id, isPrivate, mine, extra, onImported }: { id: string; i
                 const synced = mine ? await pushMySnaps(id, localSnaps(id)) : null;
                 setMsg({
                   ok: true,
-                  text: `Imported ${n} new snapshot${n === 1 ? '' : 's'} into this browser` + (synced !== null ? ` · ${synced} saved to your private sync` : mine ? ' · private sync not configured (no token)' : ''),
+                  text: `Imported ${n} new snapshot${n === 1 ? '' : 's'} into this browser` + (synced !== null ? ` · ${synced} saved to your private sync` : ''),
                 });
                 onImported();
               } catch (err) {
@@ -194,7 +194,7 @@ function AccountForm({ id }: { id: string }) {
 
 export function Neuron({ id, acc }: { id: string; acc?: string }) {
   const [q, setQ] = useState(id);
-  const [mine, setMine] = useState(() => myNeuron() === id);
+  const [mine, setMine] = useState(() => isFavorite(id));
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
   const [page, setPage] = useState(0);
   const PAGE = 25;
@@ -247,12 +247,11 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
           <Button type="submit" className="h-9 px-3">Open</Button>
           <Button
             onClick={() => {
-              setMyNeuron(mine ? undefined : id);
-              setMine(!mine);
+              setMine(toggleFavorite(id));
             }}
             className={cx('h-9 px-2.5', mine && 'text-warn')}
             aria-pressed={mine}
-            aria-label={mine ? 'Unmark as my neuron' : 'Mark as my neuron (saved only in this browser)'}
+            aria-label={mine ? 'Remove from favorites' : 'Add to favorites (saved only in this browser)'}
           >
             <Star className={cx('size-4', mine && 'fill-current')} />
           </Button>
@@ -318,7 +317,7 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
             </select>
           }
         />
-        {mine && data?.isPrivate && !priv.loading && !priv.data && (
+        {mine && data?.isPrivate && !priv.loading && !priv.data && !myToken() && (
           <form
             className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3"
             onSubmit={(e) => {
@@ -328,7 +327,7 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
               setTok(t);
             }}
           >
-            <span className="text-xs text-muted">{myToken() ? 'Sync token rejected.' : 'Paste your private sync token to load the hourly history:'}</span>
+            <span className="text-xs text-muted">Have a private sync token for this neuron? Paste it to load its hourly history:</span>
             <label className="sr-only" htmlFor="tok">Sync token</label>
             <input id="tok" name="t" type="password" autoComplete="off" className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-panel px-2 font-mono text-xs outline-none focus:border-accent" />
             <Button type="submit" className="h-8">Save</Button>

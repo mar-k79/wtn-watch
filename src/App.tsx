@@ -30,7 +30,7 @@ const TABS = [
   ['#/', 'Proposals', FileText],
   ['#/monitor', 'Monitor', Activity],
   ['#/cycles', 'Cycles', Fuel],
-  ['#/neuron', 'Neuron', Orbit],
+  ['#/neuron', 'Neurons', Orbit],
   ['#/withdrawal', 'Withdrawal', Wallet],
   ['#/labels', 'Labels', Tags],
 ] as const;
@@ -51,7 +51,7 @@ export default function App() {
   };
 
   const m = hash.match(/^#\/proposal\/(\d+)/);
-  const nm = hash.match(/^#\/neuron(?:\/(\d{1,20})(?:\?acc=([0-9a-f]{64}))?)?$/);
+  const nm = hash.match(/^#\/neuron(?:\/(\d{1,20})(?:\?acc=([0-9a-f]{64}))?|\?fav)?$/);
   const active = m ? '#/' : nm ? '#/neuron' : (TABS.find(([h]) => h === hash)?.[0] ?? '#/');
   const view = m ? (
     <ProposalDetail id={BigInt(m[1])} go={go} />
