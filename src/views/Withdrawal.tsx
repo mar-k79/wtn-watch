@@ -142,7 +142,7 @@ export function Withdrawal() {
           {rows.length ? <WTable rows={rows} /> : <Empty>No withdrawals found</Empty>}
         </Card>
       )}
-      {rows && rows.length > 0 && rows.length <= 5 && rows.map((r) => <WDetail key={String(r.w.request.withdrawal_id)} r={r} />)}
+      {rows && rows.length > 0 && rows.length <= 5 && [...rows].sort((a, b) => Number(b.w.request.withdrawal_id - a.w.request.withdrawal_id)).map((r) => <WDetail key={String(r.w.request.withdrawal_id)} r={r} />)}
     </div>
   );
 }

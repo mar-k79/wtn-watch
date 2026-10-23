@@ -5,7 +5,7 @@ import { useAsync } from '../lib/useAsync';
 import { compact, opt } from '../lib/format';
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Mono, Skeleton, cx } from '../components/ui';
 
-type Sort = 'vp' | 'stake' | 'name';
+type Sort = 'new' | 'vp' | 'stake' | 'name';
 
 export function KnownNeurons() {
   const [tab, setTab] = useState<'known' | 'fav'>(() => (location.hash.endsWith('?fav') ? 'fav' : 'known'));
@@ -16,14 +16,14 @@ export function KnownNeurons() {
     history.replaceState(null, '', t === 'fav' ? '#/neuron?fav' : '#/neuron');
   };
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState<Sort>('vp');
+  const [sort, setSort] = useState<Sort>('new');
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
     const r = (data ?? []).filter((x) => !s || x.name.toLowerCase().includes(s) || x.id.includes(s));
     const vp = (x: (typeof r)[number]) => Number(x.info ? (opt(x.info.deciding_voting_power) ?? x.info.voting_power) : 0n);
     return r.sort((a, b) =>
-      sort === 'name' ? a.name.localeCompare(b.name) : sort === 'stake' ? Number((b.info?.stake_e8s ?? 0n) - (a.info?.stake_e8s ?? 0n)) : vp(b) - vp(a),
+      sort === 'new' ? Number((b.info?.created_timestamp_seconds ?? 0n) - (a.info?.created_timestamp_seconds ?? 0n)) : sort === 'name' ? a.name.localeCompare(b.name) : sort === 'stake' ? Number((b.info?.stake_e8s ?? 0n) - (a.info?.stake_e8s ?? 0n)) : vp(b) - vp(a),
     );
   }, [data, q, sort]);
   const totalVp = useMemo(() => (data ?? []).reduce((s, x) => s + Number(x.info ? (opt(x.info.deciding_voting_power) ?? x.info.voting_power) : 0n), 0), [data]);
@@ -74,9 +74,9 @@ export function KnownNeurons() {
             sub={tab === 'fav' ? 'Starred in this browser only — never sent anywhere' : 'Registered on the NNS via Register Known Neuron proposals'}
             right={
               <div className="flex gap-1" role="group" aria-label="Sort">
-                {(['vp', 'stake', 'name'] as Sort[]).map((k) => (
+                {(['new', 'vp', 'stake', 'name'] as Sort[]).map((k) => (
                   <Button key={k} variant={sort === k ? 'default' : 'ghost'} onClick={() => setSort(k)} className={cx('h-7 px-2', sort === k && 'text-accent')}>
-                    {k === 'vp' ? 'Voting power' : k === 'stake' ? 'Stake' : 'Name'}
+                    {k === 'new' ? 'Newest' : k === 'vp' ? 'Voting power' : k === 'stake' ? 'Stake' : 'Name'}
                   </Button>
                 ))}
               </div>
