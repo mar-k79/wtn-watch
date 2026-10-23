@@ -22,3 +22,7 @@ simple = { limit = 120, period = 60 }
 name = "RL_AI"
 namespace_id = "1002"
 simple = { limit = 6, period = 60 }
+
+# hourly private snapshot of MY_NEURON (secret) into KV
+[triggers]
+crons = ["17 * * * *"]

@@ -27,6 +27,24 @@ export const setMyNeuron = (id: string | undefined) => {
     id ? localStorage.setItem(LS_MY, JSON.stringify(id)) : localStorage.removeItem(LS_MY);
   } catch {}
 };
+const LS_TOKEN = 'wtn-my-token';
+export const myToken = () => lsGet<string>(LS_TOKEN, '');
+export const setMyToken = (t: string) => (t ? lsSet(LS_TOKEN, t) : localStorage.removeItem(LS_TOKEN));
+
+/** private hourly history kept by the worker (KV, token-gated); null = not configured / wrong token */
+export async function mySnaps(id: string): Promise<Snap[] | null> {
+  const t = myToken();
+  if (!t || !EXPLAIN_URL) return null;
+  try {
+    const r = await fetch(`${EXPLAIN_URL}/my`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { neuron: string | null; snaps: Snap[] };
+    return j.neuron === id ? j.snaps : null;
+  } catch {
+    return null;
+  }
+}
+
 /** private neurons are never published — their history is kept only in this browser, one snapshot per visit */
 export function localSnaps(id: string, add?: Snap): Snap[] {
   const k = `wtn-snaps:${id}`;

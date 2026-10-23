@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { CloudCheck } from 'lucide-react';
 import { ArrowDownLeft, ArrowUpRight, Lock, RefreshCw, Search, Star } from 'lucide-react';
-import { loadNeuron, localSnaps, myNeuron, setMyNeuron, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
+import { loadNeuron, localSnaps, myNeuron, mySnaps, myToken, setMyNeuron, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
 import { neuronState } from '../lib/data';
 import { useAsync } from '../lib/useAsync';
 import { date, opt, short } from '../lib/format';
@@ -135,6 +136,8 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
   const [limit, setLimit] = useState(30);
   const { data, error, loading, reload } = useAsync(() => loadNeuron(id, acc), [id, acc]);
+  const [tok, setTok] = useState('');
+  const priv = useAsync(() => (mine ? mySnaps(id) : Promise.resolve(null)), [id, mine, tok]);
   const n = data?.info;
   const full = data?.full;
   const now = Date.now() / 1000;
@@ -143,10 +146,10 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
     if (!data) return [];
     const cur = n ? snapOf(n, full ?? null, Math.floor(now)) : undefined;
     const local = localSnaps(id, cur);
-    const snaps = [...(data.archive?.snaps ?? []), ...local].sort((a, b) => a.t - b.t);
+    const snaps = [...(data.archive?.snaps ?? []), ...(priv.data ?? []), ...local].sort((a, b) => a.t - b.t);
     if (cur && snaps[snaps.length - 1] !== cur) snaps.push(cur);
     return events(snaps, data.flows ?? []);
-  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, priv.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = feed.filter((e) => filter === 'all' || e.kind === filter);
   const vin = (data?.flows ?? []).filter((f) => f.dir === 'in').reduce((s, f) => s + f.amount, 0);
   const vout = (data?.flows ?? []).filter((f) => f.dir === 'out').reduce((s, f) => s + f.amount, 0);
@@ -237,7 +240,9 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
       <Card>
         <CardHeader
           title="Rewards & activity"
-          sub={data?.isPrivate
+          sub={data?.isPrivate && priv.data
+            ? <span className="inline-flex items-center gap-1"><CloudCheck className="size-3 text-yes" />Private hourly history · {priv.data.length} snapshots{priv.data[0] ? ` since ${date(priv.data[0].t)}` : ''} · not public</span>
+            : data?.isPrivate
             ? <span className="inline-flex items-center gap-1"><Lock className="size-3" />Private neuron — not tracked publicly; history is kept only in this browser (one snapshot per visit)</span>
             : data?.archive ? `Hourly snapshots since ${date(data.archive.since)}` : 'Now tracked — reward history starts with the next hourly snapshot'}
           right={
@@ -247,6 +252,22 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
             </select>
           }
         />
+        {mine && data?.isPrivate && !priv.loading && !priv.data && (
+          <form
+            className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const t = new FormData(e.currentTarget).get('t')?.toString().trim() ?? '';
+              setMyToken(t);
+              setTok(t);
+            }}
+          >
+            <span className="text-xs text-muted">{myToken() ? 'Sync token rejected.' : 'Paste your private sync token to load the hourly history:'}</span>
+            <label className="sr-only" htmlFor="tok">Sync token</label>
+            <input id="tok" name="t" type="password" autoComplete="off" className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-panel px-2 font-mono text-xs outline-none focus:border-accent" />
+            <Button type="submit" className="h-8">Save</Button>
+          </form>
+        )}
         {loading ? <div className="space-y-2 p-5">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-6 w-full" />)}</div>
           : !shown.length ? <Empty>No activity recorded yet.</Empty> : (
           <ul className="px-5 py-2">

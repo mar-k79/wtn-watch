@@ -1,6 +1,7 @@
 import { Actor, HttpAgent } from '@icp-sdk/core/agent';
 import { idlFactory } from '../../src/declarations/sns_governance.idl.js';
 import { idlFactory as rootIdl } from '../../src/declarations/sns_root.idl.js';
+import { idlFactory as nnsIdl } from '../../src/declarations/nns_governance.idl.js';
 
 const GOV = 'jfnic-kaaaa-aaaaq-aadla-cai';
 const ROOT = 'jmod6-4iaaa-aaaaq-aadkq-cai';
@@ -93,19 +94,52 @@ function prompt(p, lang) {
   ];
 }
 
+const tokenOk = (req, secret) => {
+  if (!secret) return false;
+  const enc = new TextEncoder();
+  const a = enc.encode((req.headers.get('Authorization') ?? '').replace(/^Bearer /, ''));
+  const b = enc.encode(secret);
+  return a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
+};
+
+// private neuron: id lives only in the MY_NEURON secret, history only in KV, read needs MY_TOKEN
+async function snapMyNeuron(env) {
+  if (!/^\d{1,20}$/.test(env.MY_NEURON ?? '')) return;
+  const agent = await HttpAgent.create({ host: 'https://icp-api.io' });
+  const gov = Actor.createActor(nnsIdl, { agent, canisterId: 'rrkah-fqaaa-aaaaa-aaaaq-cai' });
+  const r = await gov.get_neuron_info(BigInt(env.MY_NEURON));
+  if (!('Ok' in r)) return;
+  const n = r.Ok;
+  const s = {
+    t: Math.floor(Date.now() / 1000),
+    stake: Number(n.stake_e8s) / 1e8,
+    maturity: null,
+    staked: Number(opt(n.staked_maturity_e8s_equivalent) ?? 0n) / 1e8,
+    vp: Math.round(Number(opt(n.deciding_voting_power) ?? n.voting_power) / 1e6) / 100,
+    dd: Number(n.dissolve_delay_seconds),
+    state: n.state,
+  };
+  const snaps = (await env.EXPLAIN.get('my:snaps', 'json')) ?? [];
+  const last = snaps[snaps.length - 1];
+  const same = last && last.stake === s.stake && last.staked === s.staked && last.state === s.state && (s.state !== 1 || Math.abs(last.dd - s.dd) <= 86_400);
+  if (same) return;
+  snaps.push(s);
+  while (snaps.length > 5000) snaps.shift();
+  await env.EXPLAIN.put('my:snaps', JSON.stringify(snaps));
+}
+
 export default {
+  async scheduled(_ev, env, ctx) {
+    ctx.waitUntil(snapMyNeuron(env));
+  },
   async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin');
     const url = new URL(req.url);
-    if (req.method === 'OPTIONS') return new Response(null, { headers: { ...cors(origin), 'Access-Control-Allow-Methods': 'GET' } });
+    if (req.method === 'OPTIONS') return new Response(null, { headers: { ...cors(origin), 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Allow-Headers': 'Authorization', 'Access-Control-Max-Age': '86400' } });
     // admin: drop a cached explanation (e.g. after a successful prompt injection) — curl only, no CORS
     if (req.method === 'POST' && url.pathname === '/purge') {
       const id = url.searchParams.get('id') ?? '';
-      const tok = (req.headers.get('Authorization') ?? '').replace(/^Bearer /, '');
-      const enc = new TextEncoder();
-      const a = enc.encode(tok), b = enc.encode(env.ADMIN_TOKEN ?? '');
-      const ok = env.ADMIN_TOKEN && a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
-      if (!ok) return json({ error: 'forbidden' }, 403, null);
+      if (!tokenOk(req, env.ADMIN_TOKEN)) return json({ error: 'forbidden' }, 403, null);
       if (!/^\d{1,20}$/.test(id)) return json({ error: 'bad request' }, 400, null);
       if (url.searchParams.get('neuron') === '1') {
         const list = ((await env.EXPLAIN.get('neurons:tracked', 'json')) ?? []).filter((x) => x !== id);
@@ -133,6 +167,10 @@ export default {
       list.push(id);
       await env.EXPLAIN.put('neurons:tracked', JSON.stringify(list));
       return json({ tracked: true, added: true }, 200, origin);
+    }
+    if (url.pathname === '/my') {
+      if (!tokenOk(req, env.MY_TOKEN)) return json({ error: 'forbidden' }, 403, origin);
+      return json({ neuron: env.MY_NEURON ?? null, snaps: (await env.EXPLAIN.get('my:snaps', 'json')) ?? [] }, 200, origin, { 'Cache-Control': 'no-store' });
     }
     if (url.pathname === '/tracked') return json((await env.EXPLAIN.get('neurons:tracked', 'json')) ?? [], 200, origin, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/cycles' && req.method === 'GET') {
