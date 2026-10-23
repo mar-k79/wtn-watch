@@ -96,12 +96,12 @@ export async function statusReport(d: {
   }
   try {
     const { rows } = await snsCanisters();
-    const low = rows.filter((r) => ['red', 'orange'].includes(cycleLevel(r))).sort((a, b) => (a.runway ?? 0) - (b.runway ?? 0));
-    lines.push(
-      low.length
-        ? `⛽ Low cycles: ${low.map((r) => `${r.name} ${r.cycles !== undefined ? cycles(r.cycles) : '?'} (~${r.runway ?? '?'} d)`).join(', ')}`
-        : `⛽ Cycles: all ${rows.length} DAO canisters healthy (> 90 d runway)`,
-    );
+    const fmt = (r: (typeof rows)[number]) => `${r.name} ${r.cycles !== undefined ? cycles(r.cycles) : '?'} (~${r.runway ?? '?'} d${r.topups ? `, ${r.topups} top-ups/7d` : ''})`;
+    const red = rows.filter((r) => cycleLevel(r) === 'red');
+    const orange = rows.filter((r) => cycleLevel(r) === 'orange');
+    if (red.length) lines.push(`🔴 Cycles critical: ${red.map(fmt).join(', ')}`);
+    if (orange.length) lines.push(`🟠 Cycles need regular top-ups: ${orange.map(fmt).join(', ')}`);
+    if (!red.length && !orange.length) lines.push(`⛽ Cycles: all ${rows.length} DAO canisters have 30+ days`);
   } catch {}
   lines.push(`Open withdrawals: ${d.rows.length}, frozen: ${frozen.length}`);
   frozen.forEach((r) =>

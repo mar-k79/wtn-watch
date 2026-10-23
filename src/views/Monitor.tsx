@@ -134,7 +134,7 @@ export function Monitor() {
               label="Canister cycles"
               value={d.health ? cycles(d.health.cycles) : '—'}
               hint={runway !== undefined ? `~${runway.toLocaleString()} days runway` : 'status unavailable'}
-              tone={runway !== undefined && runway < 90 ? 'warn' : undefined}
+              tone={runway !== undefined && runway < 30 ? 'warn' : undefined}
             />
             <Stat
               label="Open withdrawals"

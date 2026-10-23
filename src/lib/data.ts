@@ -240,9 +240,14 @@ export type CanRow = {
   id: string;
   cycles?: bigint;
   burn?: bigint;
-  /** burn per day measured from daily snapshots (includes message & compute costs) */
+  /** burn per day measured from hourly snapshots, top-ups excluded (includes message & compute costs) */
   measured?: bigint;
+  /** days of data behind `measured` */
   measuredDays?: number;
+  /** top-ups seen in the last 7 days */
+  topups?: number;
+  topupTotal?: bigint;
+  lastTopup?: number;
   runway?: number;
   status: string;
   module?: string;
@@ -262,7 +267,7 @@ const KIND_NAMES: Record<string, string> = {
   root: 'SNS root', governance: 'SNS governance', ledger: 'WTN ledger', index: 'WTN index', swap: 'SNS swap', archive: 'Ledger archive',
 };
 
-type RawRow = { kind: string; id: string; cycles: string | null; burn: string | null; status: string; module: string | null; memory: string | null; measured?: string; measuredDays?: number };
+type RawRow = { kind: string; id: string; cycles: string | null; burn: string | null; status: string; module: string | null; memory: string | null; measured?: string; measuredDays?: number; topups?: number; topupTotal?: string; lastTopup?: number | null };
 
 const toRow = (r: RawRow): CanRow => {
   const cycles = r.cycles ? BigInt(r.cycles) : undefined;
@@ -272,6 +277,9 @@ const toRow = (r: RawRow): CanRow => {
   return {
     measured,
     measuredDays: r.measuredDays,
+    topups: r.topups,
+    topupTotal: r.topupTotal ? BigInt(r.topupTotal) : undefined,
+    lastTopup: r.lastTopup ?? undefined,
     kind: r.kind,
     id: r.id,
     name: CANISTER_NAMES[r.id] ?? KIND_NAMES[r.kind] ?? r.id.slice(0, 5),
@@ -332,8 +340,21 @@ export async function canisterHealth() {
   return { cycles: w.cycles, burnPerDay: w.burn ?? 0n, moduleHash: w.module, status: w.status, memory: w.memory ?? 0n };
 }
 
-export const cycleLevel = (r: CanRow) =>
-  r.status !== 'running' ? 'red' : r.runway === undefined ? 'gray' : r.runway < 30 ? 'red' : r.runway < 90 ? 'orange' : 'green';
+/** recently topped up = someone actively manages this canister's cycles */
+export const managed = (r: CanRow) => !!r.lastTopup && Date.now() - r.lastTopup < 3 * 86_400_000;
+
+/**
+ * red    = not running, or < 7 days left with no top-up in the last 3 days
+ * orange = < 30 days left (or < 7 days but being topped up)
+ * green  = 30+ days, or no reliable burn data yet
+ */
+export const cycleLevel = (r: CanRow): 'red' | 'orange' | 'green' | 'gray' => {
+  if (r.status !== 'running') return 'red';
+  if (r.runway === undefined) return 'gray';
+  if (r.runway < 7) return managed(r) ? 'orange' : 'red';
+  if (r.runway < 30) return 'orange';
+  return 'green';
+};
 
 /* ---------- NNS periodic confirmation (refresh voting power / confirm following) ---------- */
 export const REFRESH_DECAY_START = 15_778_800; // ~6 months: voting power starts to decay

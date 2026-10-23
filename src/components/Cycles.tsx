@@ -1,5 +1,5 @@
-import { Cpu } from 'lucide-react';
-import { cycleLevel, snsCanisters, type CanRow } from '../lib/data';
+import { Cpu, RefreshCcw } from 'lucide-react';
+import { cycleLevel, managed, snsCanisters, type CanRow } from '../lib/data';
 import { cycles, relative } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { Badge, Card, CardHeader, ErrorBox, Mono, Spinner, cx } from './ui';
@@ -11,7 +11,8 @@ const KEY = new Set(['water_neuron', 'SNS governance', 'SNS root', 'WTN ledger',
 export function CyclesCard({ tick }: { tick: number }) {
   const { data, error, loading, reload } = useAsync(() => snsCanisters(tick > 0), [tick]);
   const rows = [...(data?.rows ?? [])].sort((a, b) => (a.runway ?? 1e9) - (b.runway ?? 1e9));
-  const bad = rows.filter((r) => ['red', 'orange'].includes(cycleLevel(r)));
+  const red = rows.filter((r) => cycleLevel(r) === 'red');
+  const orange = rows.filter((r) => cycleLevel(r) === 'orange');
 
   return (
     <Card>
@@ -22,7 +23,7 @@ export function CyclesCard({ tick }: { tick: number }) {
             ? `${rows.length} DAO canisters · updated ${relative(data.at / 1000)} · shared 15-min cache (each check costs the DAO root cycles)`
             : 'All canisters controlled by the WaterNeuron SNS'
         }
-        right={bad.length ? <Badge tone="warn">{bad.length} low</Badge> : data ? <Badge tone="yes">all healthy</Badge> : undefined}
+        right={red.length ? <Badge tone="no">{red.length} critical</Badge> : orange.length ? <Badge tone="warn">{orange.length} need top-ups</Badge> : data ? <Badge tone="yes">all healthy</Badge> : undefined}
       />
       {error ? (
         <div className="p-4"><ErrorBox error={error} onRetry={reload} /></div>
@@ -37,6 +38,7 @@ export function CyclesCard({ tick }: { tick: number }) {
                 <th className="px-3 py-2 text-right font-medium">Cycles</th>
                 <th className="px-3 py-2 text-right font-medium">Burn / day</th>
                 <th className="px-3 py-2 text-right font-medium">Runway</th>
+                <th className="px-3 py-2 font-medium">Top-ups (7d)</th>
                 <th className="px-5 py-2 font-medium">Status</th>
               </tr>
             </thead>
@@ -45,7 +47,7 @@ export function CyclesCard({ tick }: { tick: number }) {
             </tbody>
           </table>
           <p className="px-5 py-3 text-[11px] text-muted">
-            Burn uses the measured daily drop when available (includes message and compute costs), otherwise the idle estimate (*). Red &lt; 30 days, orange &lt; 90 days.
+            Burn is measured from hourly snapshots over the last 7 days, with top-ups excluded (includes message and compute costs). Until enough data exists it falls back to the idle estimate (*), which is much lower than real usage. Red: under 7 days and nobody topped it up in the last 3 days. Orange: under 30 days or relies on regular top-ups.
           </p>
         </div>
       )}
@@ -71,6 +73,16 @@ function Row({ r }: { r: CanRow }) {
       </td>
       <td className={cx('tabular px-3 py-2 text-right', lvl === 'red' && 'font-semibold text-no', lvl === 'orange' && 'font-semibold text-warn')}>
         {r.runway !== undefined ? `${r.runway.toLocaleString()} d` : '—'}
+      </td>
+      <td className="px-3 py-2 text-xs whitespace-nowrap text-muted">
+        {r.topups ? (
+          <span className={cx('inline-flex items-center gap-1', managed(r) && 'text-yes')} title={r.lastTopup ? `last ${new Date(r.lastTopup).toLocaleString('en-GB')}` : undefined}>
+            <RefreshCcw className="size-3" />
+            {r.topups}× · +{r.topupTotal !== undefined ? cycles(r.topupTotal) : '?'}
+          </span>
+        ) : (
+          '—'
+        )}
       </td>
       <td className="px-5 py-2"><Badge tone={r.status === 'running' ? tone[lvl === 'gray' ? 'green' : lvl] : 'no'}>{r.status}</Badge></td>
     </tr>

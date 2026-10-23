@@ -29,6 +29,14 @@ const ls = {
   },
 };
 
+// v2: drop the over-alarming cycle alerts produced by the old idle-based thresholds
+if (!ls.get('wtn-alerts-v2', false)) {
+  ls.set('wtn-alerts', ls.get<Alert[]>('wtn-alerts', []).filter((a) => !/ cycles (low|critical)/.test(a.text)));
+  const snap = ls.get<Record<string, unknown> | null>('wtn-snap', null);
+  if (snap) ls.set('wtn-snap', { ...snap, low: undefined });
+  ls.set('wtn-alerts-v2', true);
+}
+
 let state: State = { enabled: ls.get('wtn-watch', false), running: false, log: ls.get<Alert[]>('wtn-alerts', []) };
 const subs = new Set<() => void>();
 const emit = (p: Partial<State>) => {
@@ -101,8 +109,9 @@ function diff(prev: Snap | null, cur: Snap): Alert[] {
     for (const [name, v] of Object.entries(cur.low)) {
       const [lvl, days] = v.split(':');
       const was = prev.low[name]?.split(':')[0];
-      if (was !== lvl && !(was === 'red' && lvl === 'orange'))
-        out.push({ at, level: 'warn', text: `${name} cycles ${lvl === 'red' ? 'critical' : 'low'}: ~${days} days left` });
+      // only "critical" (under 7 days and nobody topping it up) is worth an alert
+      if (lvl === 'red' && was !== 'red')
+        out.push({ at, level: 'warn', text: `${name} cycles critical: ~${days} days left and no recent top-up` });
     }
   }
   // NNS periodic confirmation: alert once when crossing 30 / 14 / 7 / 0 days
