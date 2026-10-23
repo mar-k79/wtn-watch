@@ -135,7 +135,7 @@ export default {
   async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin');
     const url = new URL(req.url);
-    if (req.method === 'OPTIONS') return new Response(null, { headers: { ...cors(origin), 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Allow-Headers': 'Authorization', 'Access-Control-Max-Age': '86400' } });
+    if (req.method === 'OPTIONS') return new Response(null, { headers: { ...cors(origin), 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '86400' } });
     // admin: drop a cached explanation (e.g. after a successful prompt injection) — curl only, no CORS
     if (req.method === 'POST' && url.pathname === '/purge') {
       const id = url.searchParams.get('id') ?? '';
@@ -148,6 +148,31 @@ export default {
       }
       await Promise.all(Object.keys(LANGS).map((l) => env.EXPLAIN.delete(`${VERSION}:${id}:${l}`)));
       return json({ purged: id }, 200, null);
+    }
+    // merge an imported backup (e.g. old vpGeek history) into the private KV history of MY_NEURON
+    if (req.method === 'POST' && url.pathname === '/my') {
+      if (!tokenOk(req, env.MY_TOKEN)) return json({ error: 'forbidden' }, 403, origin);
+      const len = Number(req.headers.get('Content-Length') ?? 0);
+      if (len > 1_500_000) return json({ error: 'too large' }, 413, origin);
+      let body;
+      try {
+        body = JSON.parse(await req.text());
+      } catch {
+        return json({ error: 'bad json' }, 400, origin);
+      }
+      if (body?.neuron !== env.MY_NEURON || !Array.isArray(body.snaps)) return json({ error: 'wrong neuron' }, 400, origin);
+      const num = (v) => typeof v === 'number' && Number.isFinite(v);
+      const clean = body.snaps
+        .filter((x) => x && num(x.t) && num(x.stake) && num(x.staked) && num(x.dd) && num(x.state))
+        .map((x) => ({ t: x.t, stake: x.stake, maturity: num(x.maturity) ? x.maturity : null, staked: x.staked, vp: num(x.vp) ? x.vp : 0, dd: x.dd, state: x.state }));
+      const cur = (await env.EXPLAIN.get('my:snaps', 'json')) ?? [];
+      const seen = new Set(cur.map((x) => x.t));
+      const add = clean.filter((x) => !seen.has(x.t));
+      if (add.length) {
+        const merged = [...cur, ...add].sort((a, b) => a.t - b.t).slice(-5000);
+        await env.EXPLAIN.put('my:snaps', JSON.stringify(merged));
+      }
+      return json({ added: add.length }, 200, origin);
     }
     if (req.method !== 'GET') return json({ error: 'method not allowed' }, 405, origin);
 

@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { CloudCheck } from 'lucide-react';
 import { ArrowDownLeft, ArrowUpRight, Download, Info, Lock, RefreshCw, Search, Star, Upload } from 'lucide-react';
-import { exportSnaps, importSnaps, loadNeuron, localSnaps, myNeuron, mySnaps, myToken, setMyNeuron, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
+import { exportSnaps, importSnaps, pushMySnaps, loadNeuron, localSnaps, myNeuron, mySnaps, myToken, setMyNeuron, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
 import { neuronState } from '../lib/data';
 import { useAsync } from '../lib/useAsync';
 import { date, opt, short } from '../lib/format';
@@ -84,7 +84,7 @@ function StakeChart({ flows }: { flows: Flow[] }) {
 }
 
 /* ---------------- how NNS rewards work + local backup ---------------- */
-function RewardsInfo({ id, isPrivate, extra, onImported }: { id: string; isPrivate: boolean; extra: Snap[]; onImported: () => void }) {
+function RewardsInfo({ id, isPrivate, mine, extra, onImported }: { id: string; isPrivate: boolean; mine: boolean; extra: Snap[]; onImported: () => void }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string }>();
   const local = localSnaps(id).length;
   return (
@@ -124,8 +124,14 @@ function RewardsInfo({ id, isPrivate, extra, onImported }: { id: string; isPriva
               if (!f) return;
               try {
                 if (f.size > 2_000_000) throw new Error('File too large');
-                const n = importSnaps(id, JSON.parse(await f.text()));
-                setMsg({ ok: true, text: `Imported ${n} new snapshot${n === 1 ? '' : 's'}` });
+                const j = JSON.parse(await f.text());
+                const n = importSnaps(id, j);
+                // my neuron: also keep it in the private worker history so it survives a browser reset
+                const synced = mine ? await pushMySnaps(id, localSnaps(id)) : null;
+                setMsg({
+                  ok: true,
+                  text: `Imported ${n} new snapshot${n === 1 ? '' : 's'} into this browser` + (synced !== null ? ` · ${synced} saved to your private sync` : mine ? ' · private sync not configured (no token)' : ''),
+                });
                 onImported();
               } catch (err) {
                 setMsg({ ok: false, text: String((err as Error)?.message ?? err) });
@@ -354,7 +360,7 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
           </ul>
         )}
       </Card>
-      {data?.info && <RewardsInfo id={id} isPrivate={data.isPrivate} extra={priv.data ?? []} onImported={() => setTok((t) => t + ' ')} />}
+      {data?.info && <RewardsInfo id={id} isPrivate={data.isPrivate} mine={mine} extra={priv.data ?? []} onImported={() => setTok((t) => t + ' ')} />}
       <p className="px-1 text-xs text-muted">All data comes from free query calls to NNS governance and the ICP index — no cycles are spent.</p>
     </div>
   );

@@ -61,6 +61,22 @@ const LS_TOKEN = 'wtn-my-token';
 export const myToken = () => lsGet<string>(LS_TOKEN, '');
 export const setMyToken = (t: string) => (t ? lsSet(LS_TOKEN, t) : localStorage.removeItem(LS_TOKEN));
 
+/** upload snapshots to the private worker history; returns added count, or null if not configured / rejected */
+export async function pushMySnaps(id: string, snaps: Snap[]): Promise<number | null> {
+  const t = myToken();
+  if (!t || !EXPLAIN_URL || !snaps.length) return null;
+  try {
+    const r = await fetch(`${EXPLAIN_URL}/my`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ neuron: id, snaps }),
+    });
+    return r.ok ? ((await r.json()) as { added: number }).added : null;
+  } catch {
+    return null;
+  }
+}
+
 /** private hourly history kept by the worker (KV, token-gated); null = not configured / wrong token */
 export async function mySnaps(id: string): Promise<Snap[] | null> {
   const t = myToken();
