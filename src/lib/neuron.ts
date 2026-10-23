@@ -27,6 +27,36 @@ export const setMyNeuron = (id: string | undefined) => {
     id ? localStorage.setItem(LS_MY, JSON.stringify(id)) : localStorage.removeItem(LS_MY);
   } catch {}
 };
+/** merge a backup into this browser's history; returns how many new snapshots were added */
+export function importSnaps(id: string, raw: unknown): number {
+  const j = raw as { neuron?: unknown; snaps?: unknown };
+  if (!j || j.neuron !== id || !Array.isArray(j.snaps)) throw new Error(`This file is not a backup of neuron ${id}`);
+  const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+  const ok = j.snaps.filter(
+    (x): x is Snap => !!x && num(x.t) && num(x.stake) && num(x.staked) && num(x.dd) && num(x.state) && (x.maturity === null || num(x.maturity)),
+  );
+  const cur = localSnaps(id);
+  const seen = new Set(cur.map((x) => x.t));
+  const add = ok.filter((x) => !seen.has(x.t)).map((x) => ({ t: x.t, stake: x.stake, maturity: x.maturity, staked: x.staked, vp: num(x.vp) ? x.vp : 0, dd: x.dd, state: x.state }));
+  const merged = [...cur, ...add].sort((a, b) => a.t - b.t).slice(-5000);
+  lsSet(`wtn-snaps:${id}`, merged);
+  return add.length;
+}
+
+/** this browser's history (+ optional extra snapshots) as a downloadable backup */
+export function exportSnaps(id: string, extra: Snap[] = []) {
+  const all = [...localSnaps(id), ...extra];
+  const byT = new Map(all.map((x) => [x.t, x]));
+  const snaps = [...byT.values()].sort((a, b) => a.t - b.t);
+  const blob = new Blob([JSON.stringify({ app: 'wtn-watch', neuron: id, exported: Math.floor(Date.now() / 1000), snaps })], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `neuron-${id}-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return snaps.length;
+}
+
 const LS_TOKEN = 'wtn-my-token';
 export const myToken = () => lsGet<string>(LS_TOKEN, '');
 export const setMyToken = (t: string) => (t ? lsSet(LS_TOKEN, t) : localStorage.removeItem(LS_TOKEN));

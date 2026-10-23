@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { CloudCheck } from 'lucide-react';
-import { ArrowDownLeft, ArrowUpRight, Lock, RefreshCw, Search, Star } from 'lucide-react';
-import { loadNeuron, localSnaps, myNeuron, mySnaps, myToken, setMyNeuron, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
+import { ArrowDownLeft, ArrowUpRight, Download, Info, Lock, RefreshCw, Search, Star, Upload } from 'lucide-react';
+import { exportSnaps, importSnaps, loadNeuron, localSnaps, myNeuron, mySnaps, myToken, setMyNeuron, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
 import { neuronState } from '../lib/data';
 import { useAsync } from '../lib/useAsync';
 import { date, opt, short } from '../lib/format';
@@ -80,6 +80,62 @@ function StakeChart({ flows }: { flows: Flow[] }) {
         <span>now</span>
       </div>
     </div>
+  );
+}
+
+/* ---------------- how NNS rewards work + local backup ---------------- */
+function RewardsInfo({ id, isPrivate, extra, onImported }: { id: string; isPrivate: boolean; extra: Snap[]; onImported: () => void }) {
+  const [msg, setMsg] = useState<{ ok: boolean; text: string }>();
+  const local = localSnaps(id).length;
+  return (
+    <Card>
+      <CardHeader title={<span className="inline-flex items-center gap-1.5"><Info className="size-4 text-accent" />How NNS rewards work &amp; where this history lives</span>} />
+      <div className="grid gap-6 px-5 py-4 text-sm leading-relaxed md:grid-cols-2">
+        <div className="space-y-2">
+          <p>The NNS pays voting rewards in a <b>reward event roughly once a day</b>. Each neuron’s share depends on its <b>voting power</b> (stake + staked maturity, boosted by dissolve delay and age) and on how many eligible proposals it voted on — directly or by following.</p>
+          <p>Rewards are added as <b>maturity</b>, not ICP. With <i>auto-stake</i> on they go to <b>staked maturity</b>, which adds to voting power. Maturity becomes ICP only when you disburse it (after a 7-day wait, with a ±5 % maturity modulation).</p>
+          <p>A neuron must <b>confirm its following at least every 6 months</b>, otherwise its voting power — and its rewards — start to decay.</p>
+        </div>
+        <div className="space-y-2">
+          <p>The NNS stores only a neuron’s <b>current</b> values, never their history. WTN Watch builds the history by taking snapshots:</p>
+          <ul className="list-disc space-y-1 pl-5 text-muted">
+            <li><span className="text-fg">Public &amp; known neurons</span> — every hour, in the public WTN Watch repository.</li>
+            <li><span className="text-fg">Private neurons</span> — never published. A snapshot is saved <b>only in this browser</b> each time you open the page.</li>
+          </ul>
+          {isPrivate && (
+            <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">Clearing site data, private mode or another device means an empty history. Export a backup now and then, or make the neuron public in the NNS dapp to get automatic hourly tracking.</p>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3">
+        <span className="mr-auto text-xs text-muted">{local} snapshot{local === 1 ? '' : 's'} stored in this browser</span>
+        <Button onClick={() => setMsg({ ok: true, text: `Exported ${exportSnaps(id, extra)} snapshots` })} disabled={!local && !extra.length}>
+          <Download className="size-3.5" /> Export backup
+        </Button>
+        <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-panel px-3 text-xs font-medium transition-colors hover:border-accent/40 hover:text-accent focus-within:outline-2 focus-within:outline-accent">
+          <Upload className="size-3.5" /> Import backup
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              if (!f) return;
+              try {
+                if (f.size > 2_000_000) throw new Error('File too large');
+                const n = importSnaps(id, JSON.parse(await f.text()));
+                setMsg({ ok: true, text: `Imported ${n} new snapshot${n === 1 ? '' : 's'}` });
+                onImported();
+              } catch (err) {
+                setMsg({ ok: false, text: String((err as Error)?.message ?? err) });
+              }
+            }}
+          />
+        </label>
+        {msg && <span role="status" className={cx('w-full text-xs', msg.ok ? 'text-yes' : 'text-no')}>{msg.text}</span>}
+      </div>
+    </Card>
   );
 }
 
@@ -298,6 +354,7 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
           </ul>
         )}
       </Card>
+      {data?.info && <RewardsInfo id={id} isPrivate={data.isPrivate} extra={priv.data ?? []} onImported={() => setTok((t) => t + ' ')} />}
       <p className="px-1 text-xs text-muted">All data comes from free query calls to NNS governance and the ICP index — no cycles are spent.</p>
     </div>
   );
