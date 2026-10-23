@@ -106,7 +106,12 @@ export default {
       const a = enc.encode(tok), b = enc.encode(env.ADMIN_TOKEN ?? '');
       const ok = env.ADMIN_TOKEN && a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
       if (!ok) return json({ error: 'forbidden' }, 403, null);
-      if (!/^\d{1,9}$/.test(id)) return json({ error: 'bad request' }, 400, null);
+      if (!/^\d{1,20}$/.test(id)) return json({ error: 'bad request' }, 400, null);
+      if (url.searchParams.get('neuron') === '1') {
+        const list = ((await env.EXPLAIN.get('neurons:tracked', 'json')) ?? []).filter((x) => x !== id);
+        await env.EXPLAIN.put('neurons:tracked', JSON.stringify(list));
+        return json({ untracked: id }, 200, null);
+      }
       await Promise.all(Object.keys(LANGS).map((l) => env.EXPLAIN.delete(`${VERSION}:${id}:${l}`)));
       return json({ purged: id }, 200, null);
     }

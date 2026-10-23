@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { ChevronRight, Search } from 'lucide-react';
-import { knownNeurons, DEFAULT_NEURON } from '../lib/neuron';
+import { knownNeurons, myNeuron } from '../lib/neuron';
 import { useAsync } from '../lib/useAsync';
 import { compact, opt } from '../lib/format';
 import { Badge, Button, Card, CardHeader, Empty, ErrorBox, Mono, Skeleton, cx } from '../components/ui';
@@ -33,9 +33,9 @@ export function KnownNeurons() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Neurons</h1>
-          <p className="text-sm text-muted">Known NNS neurons, or open any neuron by ID — its reward history is tracked automatically.</p>
+          <p className="text-sm text-muted">Known NNS neurons, or open any neuron by ID. Public neurons get an hourly reward history; private ones stay in your browser.</p>
         </div>
-        <a href={`#/neuron/${DEFAULT_NEURON}`} className="text-sm text-accent hover:underline">My neuron →</a>
+        {myNeuron() && <a href={`#/neuron/${myNeuron()}`} className="text-sm text-accent hover:underline">My neuron →</a>}
       </div>
 
       <form onSubmit={open} className="flex gap-2">

@@ -25,10 +25,12 @@ const gov = Actor.createActor(idlFactory, { agent, canisterId: GOV });
 // watch.json: ["<id>", …] or [{ "id": "<id>", "account": "<64-hex, for private neurons>" }, …]
 const accounts = new Map();
 const ids = new Set();
+const watchIds = new Set();
 for (const x of JSON.parse(readFileSync('neurons/watch.json', 'utf8'))) {
   const w = typeof x === 'string' ? { id: x } : x;
   if (!ID.test(w.id)) continue;
   ids.add(w.id);
+  watchIds.add(w.id);
   if (/^[0-9a-f]{64}$/.test(w.account ?? '')) accounts.set(w.id, w.account);
 }
 const known = await gov.list_known_neurons().catch(() => ({ known_neurons: [] }));
@@ -60,6 +62,8 @@ let changed = 0;
 for (const id of all) {
   const n = infos.get(id);
   if (!n) continue;
+  // never publish private neurons unless explicitly listed in watch.json
+  if (!accounts.has(id) && !watchIds.has(id) && opt(n.visibility) !== 2 && !opt(n.known_neuron_data)) continue;
   const full = fulls.get(id);
   const file = `neurons/${id}.json`;
   const a = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { neuron: id, since: t, snaps: [] };

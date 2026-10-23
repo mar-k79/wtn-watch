@@ -6,7 +6,42 @@ import { nnsGov, IDS, BUILDS_REPO, EXPLAIN_URL } from './ic';
 import { opt, pool } from './format';
 import type { Neuron, NeuronInfo } from '../declarations/nns_governance';
 
-export const DEFAULT_NEURON = 'REDACTED';
+/* ---------- per-browser state (never leaves this device) ---------- */
+const LS_MY = 'wtn-my-neuron';
+const lsGet = <T>(k: string, d: T): T => {
+  try {
+    const v = localStorage.getItem(k);
+    return v ? (JSON.parse(v) as T) : d;
+  } catch {
+    return d;
+  }
+};
+const lsSet = (k: string, v: unknown) => {
+  try {
+    localStorage.setItem(k, JSON.stringify(v));
+  } catch {}
+};
+export const myNeuron = (): string | undefined => lsGet<string | undefined>(LS_MY, undefined);
+export const setMyNeuron = (id: string | undefined) => {
+  try {
+    id ? localStorage.setItem(LS_MY, JSON.stringify(id)) : localStorage.removeItem(LS_MY);
+  } catch {}
+};
+/** private neurons are never published — their history is kept only in this browser, one snapshot per visit */
+export function localSnaps(id: string, add?: Snap): Snap[] {
+  const k = `wtn-snaps:${id}`;
+  const list = lsGet<Snap[]>(k, []);
+  if (add) {
+    const last = list[list.length - 1];
+    const same = last && (['stake', 'maturity', 'staked', 'dd', 'state'] as const).every((f) => Object.is(last[f], add[f]) || (f === 'dd' && Math.abs(last.dd - add.dd) <= 86_400));
+    if (!same) {
+      list.push(add);
+      while (list.length > 2000) list.shift();
+      lsSet(k, list);
+    }
+  }
+  return list;
+}
 export const HALF_YEAR = 15_778_800; // s — min dissolve delay to vote; also the "confirm following" window
 
 /* ---------- account identifier (sha224("\x0Aaccount-id" + owner + subaccount), crc32 prefix) ---------- */
@@ -80,6 +115,8 @@ export type NeuronView = {
   flows: Flow[] | null;
   flowsError?: string;
   archive: Archive | null;
+  /** private and not a known neuron → not tracked publicly */
+  isPrivate: boolean;
 };
 
 /** register the neuron for hourly reward snapshots (worker keeps a capped list; best effort) */
@@ -147,7 +184,9 @@ export async function loadNeuron(id: string, acc?: string): Promise<NeuronView> 
     archive(id),
   ]);
   const info = 'Ok' in r ? r.Ok : null;
-  if (info) track(id);
+  const isPrivate = !!info && opt(info.visibility) !== 2 && !opt(info.known_neuron_data);
+  // only public or known neurons are tracked publicly; private ones stay in this browser
+  if (info && !isPrivate) track(id);
   const full = list?.full_neurons.find((n) => opt(n.id)?.id === BigInt(id)) ?? null;
   const account = full ? accountId(Principal.fromText(IDS.nnsGovernance), new Uint8Array(full.account)) : acc && validAccount(acc) ? acc : a?.account;
   let f: Flow[] | null = null;
@@ -159,7 +198,7 @@ export async function loadNeuron(id: string, acc?: string): Promise<NeuronView> 
       flowsError = String((e as Error)?.message ?? e);
     }
   }
-  return { info, full, account, flows: f, flowsError, archive: a };
+  return { info, full, account, flows: f, flowsError, archive: isPrivate ? null : a, isPrivate };
 }
 
 export const snapOf = (n: NeuronInfo, full: Neuron | null, t: number): Snap => ({

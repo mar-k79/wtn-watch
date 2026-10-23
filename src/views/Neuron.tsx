@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { ArrowDownLeft, ArrowUpRight, RefreshCw, Search } from 'lucide-react';
-import { loadNeuron, snapOf, validAccount, DEFAULT_NEURON, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
+import { ArrowDownLeft, ArrowUpRight, Lock, RefreshCw, Search, Star } from 'lucide-react';
+import { loadNeuron, localSnaps, myNeuron, setMyNeuron, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
 import { neuronState } from '../lib/data';
 import { useAsync } from '../lib/useAsync';
 import { date, opt, short } from '../lib/format';
@@ -129,8 +129,9 @@ function AccountForm({ id }: { id: string }) {
   );
 }
 
-export function Neuron({ id = DEFAULT_NEURON, acc }: { id?: string; acc?: string }) {
+export function Neuron({ id, acc }: { id: string; acc?: string }) {
   const [q, setQ] = useState(id);
+  const [mine, setMine] = useState(() => myNeuron() === id);
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
   const [limit, setLimit] = useState(30);
   const { data, error, loading, reload } = useAsync(() => loadNeuron(id, acc), [id, acc]);
@@ -140,8 +141,10 @@ export function Neuron({ id = DEFAULT_NEURON, acc }: { id?: string; acc?: string
 
   const feed = useMemo(() => {
     if (!data) return [];
-    const snaps = [...(data.archive?.snaps ?? [])];
-    if (n) snaps.push(snapOf(n, full ?? null, Math.floor(now)));
+    const cur = n ? snapOf(n, full ?? null, Math.floor(now)) : undefined;
+    const local = localSnaps(id, cur);
+    const snaps = [...(data.archive?.snaps ?? []), ...local].sort((a, b) => a.t - b.t);
+    if (cur && snaps[snaps.length - 1] !== cur) snaps.push(cur);
     return events(snaps, data.flows ?? []);
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = feed.filter((e) => filter === 'all' || e.kind === filter);
@@ -176,6 +179,17 @@ export function Neuron({ id = DEFAULT_NEURON, acc }: { id?: string; acc?: string
               className="h-9 w-full rounded-lg border border-line bg-panel pr-3 pl-9 font-mono text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30" />
           </div>
           <Button type="submit" className="h-9 px-3">Open</Button>
+          <Button
+            onClick={() => {
+              setMyNeuron(mine ? undefined : id);
+              setMine(!mine);
+            }}
+            className={cx('h-9 px-2.5', mine && 'text-warn')}
+            aria-pressed={mine}
+            aria-label={mine ? 'Unmark as my neuron' : 'Mark as my neuron (saved only in this browser)'}
+          >
+            <Star className={cx('size-4', mine && 'fill-current')} />
+          </Button>
           <Button onClick={reload} className="h-9 px-2.5" aria-label="Refresh"><RefreshCw className={cx('size-4', loading && 'animate-spin')} /></Button>
         </form>
       </div>
@@ -188,7 +202,7 @@ export function Neuron({ id = DEFAULT_NEURON, acc }: { id?: string; acc?: string
             <Row k="Age" v={n ? dur(Number(n.age_seconds)) : sk} />
             <Row k="Created" v={n ? date(n.created_timestamp_seconds) : sk} />
             <Row k="Visibility" v={n ? VIS[opt(n.visibility) ?? 0] ?? '—' : sk} />
-            <Row k="Tracked here since" v={data ? (data.archive ? date(data.archive.since) : 'not archived yet') : sk} />
+            <Row k="Tracked here since" v={!data ? sk : data.isPrivate ? <span className="text-muted">this browser only</span> : data.archive ? date(data.archive.since) : 'not archived yet'} />
           </Card>
           <Card className="px-5 py-2 divide-y divide-line">
             <Row k="Staked ICP" v={n ? `${n2(Number(n.stake_e8s) / 1e8, 4)} ICP` : sk} />
@@ -223,7 +237,9 @@ export function Neuron({ id = DEFAULT_NEURON, acc }: { id?: string; acc?: string
       <Card>
         <CardHeader
           title="Rewards & activity"
-          sub={data?.archive ? `Hourly snapshots since ${date(data.archive.since)}` : 'Now tracked — reward history starts with the next hourly snapshot'}
+          sub={data?.isPrivate
+            ? <span className="inline-flex items-center gap-1"><Lock className="size-3" />Private neuron — not tracked publicly; history is kept only in this browser (one snapshot per visit)</span>
+            : data?.archive ? `Hourly snapshots since ${date(data.archive.since)}` : 'Now tracked — reward history starts with the next hourly snapshot'}
           right={
             <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Filter actions"
               className="h-8 rounded-lg border border-line bg-panel px-2 text-xs outline-none focus:border-accent">
