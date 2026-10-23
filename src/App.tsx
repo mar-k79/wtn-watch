@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Activity, Droplets, FileText, Fuel, Moon, Sun, Tags, Wallet } from 'lucide-react';
+import { Activity, Droplets, FileText, Fuel, Moon, Orbit, Sun, Tags, Wallet } from 'lucide-react';
 import { Proposals } from './views/Proposals';
 import { ProposalDetail } from './views/ProposalDetail';
 import { Monitor } from './views/Monitor';
 import { Withdrawal } from './views/Withdrawal';
 import { Labels } from './views/Labels';
 import { Cycles } from './views/Cycles';
+import { Neuron } from './views/Neuron';
+import { KnownNeurons } from './views/KnownNeurons';
 import { startWatcher } from './lib/watch';
 import { cx } from './components/ui';
 import { REPO } from './lib/ic';
@@ -28,6 +30,7 @@ const TABS = [
   ['#/', 'Proposals', FileText],
   ['#/monitor', 'Monitor', Activity],
   ['#/cycles', 'Cycles', Fuel],
+  ['#/neuron', 'Neuron', Orbit],
   ['#/withdrawal', 'Withdrawal', Wallet],
   ['#/labels', 'Labels', Tags],
 ] as const;
@@ -48,9 +51,12 @@ export default function App() {
   };
 
   const m = hash.match(/^#\/proposal\/(\d+)/);
-  const active = m ? '#/' : (TABS.find(([h]) => h === hash)?.[0] ?? '#/');
+  const nm = hash.match(/^#\/neuron(?:\/(\d{1,20})(?:\?acc=([0-9a-f]{64}))?)?$/);
+  const active = m ? '#/' : nm ? '#/neuron' : (TABS.find(([h]) => h === hash)?.[0] ?? '#/');
   const view = m ? (
     <ProposalDetail id={BigInt(m[1])} go={go} />
+  ) : nm ? (
+    nm[1] ? <Neuron key={`${nm[1]}:${nm[2] ?? ''}`} id={nm[1]} acc={nm[2]} /> : <KnownNeurons />
   ) : active === '#/monitor' ? (
     <Monitor />
   ) : active === '#/cycles' ? (

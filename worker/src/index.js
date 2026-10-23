@@ -6,6 +6,7 @@ const GOV = 'jfnic-kaaaa-aaaaq-aadla-cai';
 const ROOT = 'jmod6-4iaaa-aaaaq-aadkq-cai';
 const CYCLES_TTL = 900; // s — one root call per 15 min for all users (each call costs the DAO's root canister cycles)
 const VERSION = 'v6';
+const TRACK_MAX = 300; // neurons auto-tracked for reward history (bounds KV writes and CI time)
 const LANGS = { en: 'English' };
 const ORIGINS = [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/, /^https:\/\/qdylx-cqaaa-aaaaf-qha5q-cai\.(icp0\.io|ic0\.app)$/];
 
@@ -117,6 +118,18 @@ export default {
       const { success } = await env.RL.limit({ key: `${ip}:all` });
       if (!success) return json({ error: 'too many requests, slow down' }, 429, origin, { 'Retry-After': '60' });
     }
+    // neurons opened in WTN Watch → snapshotted hourly by .github/workflows/archive-neurons.yml (rewards history for any neuron)
+    if (url.pathname === '/track') {
+      const id = url.searchParams.get('id') ?? '';
+      if (!/^\d{1,20}$/.test(id)) return json({ error: 'bad request' }, 400, origin);
+      const list = (await env.EXPLAIN.get('neurons:tracked', 'json')) ?? [];
+      if (list.includes(id)) return json({ tracked: true }, 200, origin);
+      if (list.length >= TRACK_MAX) return json({ tracked: false, error: 'tracking list full' }, 200, origin);
+      list.push(id);
+      await env.EXPLAIN.put('neurons:tracked', JSON.stringify(list));
+      return json({ tracked: true, added: true }, 200, origin);
+    }
+    if (url.pathname === '/tracked') return json((await env.EXPLAIN.get('neurons:tracked', 'json')) ?? [], 200, origin, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/cycles' && req.method === 'GET') {
       const hit = await env.EXPLAIN.get('cycles', 'json');
       if (hit && Date.now() - hit.at < CYCLES_TTL * 1000) return json({ ...hit, cached: true }, 200, origin);
