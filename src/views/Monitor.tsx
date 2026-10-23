@@ -239,7 +239,7 @@ const NNS_OPTS = [
   ['none', 'No neuron'],
 ] as const;
 
-const reqSec = (r: WRow) => {
+export const reqSec = (r: WRow) => {
   const t = Number(r.w.request.timestamp);
   return t > 1e15 ? t / 1e9 : t;
 };
@@ -339,7 +339,18 @@ export function WTable({ rows, mainDelay, filters = true }: { rows: WRow[]; main
                     )}
                   </td>
                   <td className={`tabular px-3 py-2 text-right ${over ? 'font-semibold text-warn' : ''}`}>{r.nns ? days(delay) : '—'}</td>
-                  <td className="px-5 py-2 font-mono text-xs text-muted">{r.neuronId !== undefined ? String(r.neuronId) : '—'}</td>
+                  <td className="px-5 py-2 font-mono text-xs whitespace-nowrap">
+                    {r.neuronId !== undefined ? (
+                      <span className="inline-flex items-center gap-2">
+                        <a href={`#/neuron/${r.neuronId}`} className="text-accent hover:underline" title="Open in WTN Watch">{String(r.neuronId)}</a>
+                        <Ext href={`https://dashboard.internetcomputer.org/neuron/${r.neuronId}`} className="text-muted hover:text-accent">
+                          <span className="sr-only">ICP Dashboard</span>
+                        </Ext>
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
