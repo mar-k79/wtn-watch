@@ -129,9 +129,106 @@ async function snapMyNeuron(env) {
   await env.EXPLAIN.put('my:snaps', JSON.stringify(snaps));
 }
 
+/**
+ * One get_sns_canisters_summary call (costs the DAO root a little) → hourly history (7 d), daily history (400 d)
+ * and a permanent top-up log. Called by the hourly cron and, between crons, at most every 15 min by visitors.
+ */
+async function refreshCycles(env, ctx) {
+  const agent = await HttpAgent.create({ host: 'https://icp-api.io' });
+  const root = Actor.createActor(rootIdl, { agent, canisterId: ROOT });
+  const r = await root.get_sns_canisters_summary({ update_canister_list: [] });
+  const row = (kind, c) => {
+    const st = opt(c.status);
+    return {
+      kind,
+      id: opt(c.canister_id)?.toText() ?? '',
+      cycles: st ? String(st.cycles) : null,
+      burn: st ? String(st.idle_cycles_burned_per_day) : null,
+      status: st ? Object.keys(st.status)[0] : 'unknown',
+      module: st && opt(st.module_hash) ? [...opt(st.module_hash)].map((b) => b.toString(16).padStart(2, '0')).join('') : null,
+      memory: st ? String(st.memory_size) : null,
+    };
+  };
+  const list = [];
+  for (const k of ['root', 'governance', 'ledger', 'index', 'swap']) if (opt(r[k])) list.push(row(k, opt(r[k])));
+  r.dapps.forEach((c) => list.push(row('dapp', c)));
+  r.archives.forEach((c) => list.push(row('archive', c)));
+  // hourly history (≤ 7 days). Burn = sum of drops between snapshots / time covered by drops;
+  // a rise between two snapshots is a top-up and that interval is skipped (not counted as burn).
+  const now = Date.now();
+  const HOUR = 3600_000;
+  const hist = ((await env.EXPLAIN.get('cycles:hist', 'json')) ?? []).filter((h) => now - h.at < 7 * 24 * HOUR);
+  const point = { at: now, c: Object.fromEntries(list.filter((x) => x.cycles).map((x) => [x.id, x.cycles])) };
+  const newest = hist[hist.length - 1];
+  if (!newest || now - newest.at > 55 * 60_000) {
+    hist.push(point);
+    ctx.waitUntil(env.EXPLAIN.put('cycles:hist', JSON.stringify(hist)));
+    // permanent top-up log: any rise since the previous hourly point
+    if (newest) {
+      const events = [];
+      for (const x of list) {
+        const before = newest.c[x.id];
+        if (!before || !x.cycles) continue;
+        const diff = BigInt(x.cycles) - BigInt(before);
+        if (diff > 0n) events.push({ at: now, prev: newest.at, id: x.id, kind: x.kind, amount: String(diff), before, after: x.cycles });
+      }
+      if (events.length) {
+        const log = (await env.EXPLAIN.get('cycles:topups', 'json')) ?? [];
+        log.push(...events);
+        while (log.length > 5000) log.shift();
+        ctx.waitUntil(env.EXPLAIN.put('cycles:topups', JSON.stringify(log)));
+      }
+    }
+    // long-term history: first point of each UTC day, kept ~400 days
+    const day = new Date(now).toISOString().slice(0, 10);
+    const daily = (await env.EXPLAIN.get('cycles:daily', 'json')) ?? [];
+    if (daily[daily.length - 1]?.day !== day) {
+      daily.push({ day, at: now, c: point.c });
+      while (daily.length > 400) daily.shift();
+      ctx.waitUntil(env.EXPLAIN.put('cycles:daily', JSON.stringify(daily)));
+    }
+  }
+  const series = newest && now - newest.at <= 55 * 60_000 ? [...hist, point] : hist;
+  for (const x of list) {
+    if (!x.cycles) continue;
+    const pts = series.filter((h) => h.c[x.id]).map((h) => ({ at: h.at, v: BigInt(h.c[x.id]) }));
+    let burned = 0n, burnMs = 0, topups = 0, topupTotal = 0n, lastTopup = 0;
+    for (let k = 1; k < pts.length; k++) {
+      const d = pts[k - 1].v - pts[k].v;
+      if (d >= 0n) {
+        burned += d;
+        burnMs += pts[k].at - pts[k - 1].at;
+      } else {
+        topups++;
+        topupTotal += -d;
+        lastTopup = pts[k].at;
+      }
+    }
+    if (burnMs >= 6 * HOUR) {
+      x.measured = String(BigInt(Math.round((Number(burned) * 86_400_000) / burnMs)));
+      x.measuredDays = Math.round((burnMs / 86_400_000) * 10) / 10;
+    }
+    x.topups = topups;
+    x.topupTotal = String(topupTotal);
+    x.lastTopup = lastTopup || null;
+  }
+  const body = { at: now, canisters: list };
+  ctx.waitUntil(env.EXPLAIN.put('cycles', JSON.stringify(body)));
+  return body;
+}
+
 export default {
   async scheduled(_ev, env, ctx) {
     ctx.waitUntil(snapMyNeuron(env));
+    // keep the cycles history continuous even when nobody opens the app (one root call per hour)
+    ctx.waitUntil(
+      (async () => {
+        const hit = await env.EXPLAIN.get('cycles', 'json');
+        if (hit && Date.now() - hit.at < 50 * 60_000) return;
+        await env.EXPLAIN.put('cycles:lock', '1', { expirationTtl: 60 });
+        await refreshCycles(env, ctx);
+      })().catch((e) => console.error('cron cycles', e)),
+    );
   },
   async fetch(req, env, ctx) {
     const origin = req.headers.get('Origin');
@@ -209,68 +306,19 @@ export default {
       }
       await env.EXPLAIN.put('cycles:lock', '1', { expirationTtl: 60 });
       try {
-        const agent = await HttpAgent.create({ host: 'https://icp-api.io' });
-        const root = Actor.createActor(rootIdl, { agent, canisterId: ROOT });
-        const r = await root.get_sns_canisters_summary({ update_canister_list: [] });
-        const row = (kind, c) => {
-          const st = opt(c.status);
-          return {
-            kind,
-            id: opt(c.canister_id)?.toText() ?? '',
-            cycles: st ? String(st.cycles) : null,
-            burn: st ? String(st.idle_cycles_burned_per_day) : null,
-            status: st ? Object.keys(st.status)[0] : 'unknown',
-            module: st && opt(st.module_hash) ? [...opt(st.module_hash)].map((b) => b.toString(16).padStart(2, '0')).join('') : null,
-            memory: st ? String(st.memory_size) : null,
-          };
-        };
-        const list = [];
-        for (const k of ['root', 'governance', 'ledger', 'index', 'swap']) if (opt(r[k])) list.push(row(k, opt(r[k])));
-        r.dapps.forEach((c) => list.push(row('dapp', c)));
-        r.archives.forEach((c) => list.push(row('archive', c)));
-        // hourly history (≤ 7 days). Burn = sum of drops between snapshots / time covered by drops;
-        // a rise between two snapshots is a top-up and that interval is skipped (not counted as burn).
-        const now = Date.now();
-        const HOUR = 3600_000;
-        const hist = ((await env.EXPLAIN.get('cycles:hist', 'json')) ?? []).filter((h) => now - h.at < 7 * 24 * HOUR);
-        const point = { at: now, c: Object.fromEntries(list.filter((x) => x.cycles).map((x) => [x.id, x.cycles])) };
-        const newest = hist[hist.length - 1];
-        if (!newest || now - newest.at > 55 * 60_000) {
-          hist.push(point);
-          ctx.waitUntil(env.EXPLAIN.put('cycles:hist', JSON.stringify(hist)));
-        }
-        const series = newest && now - newest.at <= 55 * 60_000 ? [...hist, point] : hist;
-        for (const x of list) {
-          if (!x.cycles) continue;
-          const pts = series.filter((h) => h.c[x.id]).map((h) => ({ at: h.at, v: BigInt(h.c[x.id]) }));
-          let burned = 0n, burnMs = 0, topups = 0, topupTotal = 0n, lastTopup = 0;
-          for (let k = 1; k < pts.length; k++) {
-            const d = pts[k - 1].v - pts[k].v;
-            if (d >= 0n) {
-              burned += d;
-              burnMs += pts[k].at - pts[k - 1].at;
-            } else {
-              topups++;
-              topupTotal += -d;
-              lastTopup = pts[k].at;
-            }
-          }
-          if (burnMs >= 6 * HOUR) {
-            x.measured = String(BigInt(Math.round((Number(burned) * 86_400_000) / burnMs)));
-            x.measuredDays = Math.round((burnMs / 86_400_000) * 10) / 10;
-          }
-          x.topups = topups;
-          x.topupTotal = String(topupTotal);
-          x.lastTopup = lastTopup || null;
-        }
-        const body = { at: now, canisters: list };
-        ctx.waitUntil(env.EXPLAIN.put('cycles', JSON.stringify(body)));
+        const body = await refreshCycles(env, ctx);
         return json({ ...body, cached: false }, 200, origin);
       } catch (e) {
         if (hit) return json({ ...hit, cached: true, stale: true }, 200, origin);
         console.error(e);
         return json({ error: 'IC query failed' }, 502, origin);
       }
+    }
+    if (url.pathname === '/cycles/topups') {
+      return json((await env.EXPLAIN.get('cycles:topups', 'json')) ?? [], 200, origin, { 'Cache-Control': 'public, max-age=300' });
+    }
+    if (url.pathname === '/cycles/daily') {
+      return json((await env.EXPLAIN.get('cycles:daily', 'json')) ?? [], 200, origin, { 'Cache-Control': 'public, max-age=3600' });
     }
     if (url.pathname === '/verdicts' && req.method === 'GET') {
       const ids = (url.searchParams.get('ids') ?? '').split(',').filter((x) => /^\d{1,9}$/.test(x)).slice(0, 60);

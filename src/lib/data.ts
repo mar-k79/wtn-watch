@@ -263,7 +263,7 @@ export const CANISTER_NAMES: Record<string, string> = {
   'uqeyr-oaaaa-aaaar-qbyyq-cai': 'icrc_validator',
   'zftzm-qqaaa-aaaam-adxfa-cai': 'sns_module',
 };
-const KIND_NAMES: Record<string, string> = {
+export const KIND_NAMES: Record<string, string> = {
   root: 'SNS root', governance: 'SNS governance', ledger: 'WTN ledger', index: 'WTN index', swap: 'SNS swap', archive: 'Ledger archive',
 };
 
@@ -483,3 +483,22 @@ export const buildsIndex = () =>
     idxCache = null;
     throw e;
   }));
+
+/* ---------- permanent cycles top-up log (kept by the worker, not the browser) ---------- */
+export type TopUp = { at: number; prev: number; id: string; kind: string; amount: bigint; before: bigint; after: bigint; name: string };
+
+export async function cyclesTopups(): Promise<TopUp[]> {
+  if (!EXPLAIN_URL) return [];
+  const r = await fetch(`${EXPLAIN_URL.replace(/\/$/, '')}/cycles/topups`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const raw: { at: number; prev: number; id: string; kind: string; amount: string; before: string; after: string }[] = await r.json();
+  return raw
+    .map((e) => ({
+      ...e,
+      amount: BigInt(e.amount),
+      before: BigInt(e.before),
+      after: BigInt(e.after),
+      name: CANISTER_NAMES[e.id] ?? KIND_NAMES[e.kind] ?? e.id.slice(0, 5),
+    }))
+    .sort((a, b) => b.at - a.at);
+}

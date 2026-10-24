@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { CyclesCard } from '../components/Cycles';
+import { TopUpsCard } from '../components/TopUps';
 import { Button } from '../components/ui';
 
 export function Cycles() {
@@ -17,6 +18,7 @@ export function Cycles() {
         </Button>
       </div>
       <CyclesCard tick={tick} />
+      <TopUpsCard tick={tick} />
     </div>
   );
 }
