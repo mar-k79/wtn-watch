@@ -103,11 +103,18 @@ const tokenOk = (req, secret) => {
 };
 
 // private neuron: id lives only in the MY_NEURON secret, history only in KV, read needs MY_TOKEN
-async function snapMyNeuron(env) {
-  if (!/^\d{1,20}$/.test(env.MY_NEURON ?? '')) return;
-  const agent = await HttpAgent.create({ host: 'https://icp-api.io' });
-  const gov = Actor.createActor(nnsIdl, { agent, canisterId: 'rrkah-fqaaa-aaaaa-aaaaq-cai' });
-  const r = await gov.get_neuron_info(BigInt(env.MY_NEURON));
+const MY_MAX = 20; // private neurons stored per owner (bounds hourly NNS calls and KV writes)
+
+/** private neurons: MY_NEURON secret (legacy, always on) + list managed from the app with MY_TOKEN */
+async function privList(env) {
+  const list = ((await env.EXPLAIN.get('my:neurons', 'json')) ?? []).filter((x) => /^\d{1,20}$/.test(x));
+  if (/^\d{1,20}$/.test(env.MY_NEURON ?? '') && !list.includes(env.MY_NEURON)) list.unshift(env.MY_NEURON);
+  return list.slice(0, MY_MAX);
+}
+const snapKey = (env, id) => (id === env.MY_NEURON ? 'my:snaps' : `my:snaps:${id}`);
+
+async function snapNeuron(env, gov, id) {
+  const r = await gov.get_neuron_info(BigInt(id));
   if (!('Ok' in r)) return;
   const n = r.Ok;
   const s = {
@@ -119,14 +126,23 @@ async function snapMyNeuron(env) {
     dd: Number(n.dissolve_delay_seconds),
     state: n.state,
   };
-  const snaps = (await env.EXPLAIN.get('my:snaps', 'json')) ?? [];
+  const key = snapKey(env, id);
+  const snaps = (await env.EXPLAIN.get(key, 'json')) ?? [];
   const last = snaps[snaps.length - 1];
   const near = (a, b) => Math.abs(a - b) < 1e-4; // ignore rounding dust (e.g. imported vs live values)
   const same = last && near(last.stake, s.stake) && near(last.staked, s.staked) && last.state === s.state && (s.state !== 1 || Math.abs(last.dd - s.dd) <= 86_400);
   if (same) return;
   snaps.push(s);
   while (snaps.length > 5000) snaps.shift();
-  await env.EXPLAIN.put('my:snaps', JSON.stringify(snaps));
+  await env.EXPLAIN.put(key, JSON.stringify(snaps));
+}
+
+async function snapMyNeurons(env, only) {
+  const ids = only ? [only] : await privList(env);
+  if (!ids.length) return;
+  const agent = await HttpAgent.create({ host: 'https://icp-api.io' });
+  const gov = Actor.createActor(nnsIdl, { agent, canisterId: 'rrkah-fqaaa-aaaaa-aaaaq-cai' });
+  for (const id of ids) await snapNeuron(env, gov, id).catch((e) => console.error('snap', id, e));
 }
 
 /**
@@ -219,7 +235,7 @@ async function refreshCycles(env, ctx) {
 
 export default {
   async scheduled(_ev, env, ctx) {
-    ctx.waitUntil(snapMyNeuron(env));
+    ctx.waitUntil(snapMyNeurons(env));
     // keep the cycles history continuous even when nobody opens the app (one root call per hour)
     ctx.waitUntil(
       (async () => {
@@ -248,6 +264,34 @@ export default {
       return json({ purged: id }, 200, null);
     }
     // merge an imported backup (e.g. old vpGeek history) into the private KV history of MY_NEURON
+    // private cloud list: add / remove a neuron (owner only)
+    if (url.pathname === '/my/neurons') {
+      if (!tokenOk(req, env.MY_TOKEN)) return json({ error: 'forbidden' }, 403, origin);
+      if (req.method === 'GET') return json({ neurons: await privList(env), fixed: env.MY_NEURON ?? null, max: MY_MAX }, 200, origin, { 'Cache-Control': 'no-store' });
+      if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405, origin);
+      let body;
+      try {
+        body = JSON.parse(await req.text());
+      } catch {
+        return json({ error: 'bad json' }, 400, origin);
+      }
+      const id = String(body?.neuron ?? '');
+      if (!/^\d{1,20}$/.test(id)) return json({ error: 'bad neuron id' }, 400, origin);
+      if (id === env.MY_NEURON) return json({ neurons: await privList(env), fixed: env.MY_NEURON }, 200, origin);
+      let list = ((await env.EXPLAIN.get('my:neurons', 'json')) ?? []).filter((x) => /^\d{1,20}$/.test(x));
+      if (body.on) {
+        if (!list.includes(id)) {
+          if ((await privList(env)).length >= MY_MAX) return json({ error: `limit of ${MY_MAX} private neurons reached` }, 400, origin);
+          list.push(id);
+          await env.EXPLAIN.put('my:neurons', JSON.stringify(list));
+          ctx.waitUntil(snapMyNeurons(env, id)); // first snapshot right away
+        }
+      } else {
+        list = list.filter((x) => x !== id); // history is kept; only hourly snapshots stop
+        await env.EXPLAIN.put('my:neurons', JSON.stringify(list));
+      }
+      return json({ neurons: await privList(env), fixed: env.MY_NEURON ?? null }, 200, origin);
+    }
     if (req.method === 'POST' && url.pathname === '/my') {
       if (!tokenOk(req, env.MY_TOKEN)) return json({ error: 'forbidden' }, 403, origin);
       const len = Number(req.headers.get('Content-Length') ?? 0);
@@ -258,17 +302,18 @@ export default {
       } catch {
         return json({ error: 'bad json' }, 400, origin);
       }
-      if (body?.neuron !== env.MY_NEURON || !Array.isArray(body.snaps)) return json({ error: 'wrong neuron' }, 400, origin);
+      if (!(await privList(env)).includes(String(body?.neuron)) || !Array.isArray(body.snaps)) return json({ error: 'wrong neuron' }, 400, origin);
       const num = (v) => typeof v === 'number' && Number.isFinite(v);
       const clean = body.snaps
         .filter((x) => x && num(x.t) && num(x.stake) && num(x.staked) && num(x.dd) && num(x.state))
         .map((x) => ({ t: x.t, stake: x.stake, maturity: num(x.maturity) ? x.maturity : null, staked: x.staked, vp: num(x.vp) ? x.vp : 0, dd: x.dd, state: x.state }));
-      const cur = (await env.EXPLAIN.get('my:snaps', 'json')) ?? [];
+      const key = snapKey(env, String(body.neuron));
+      const cur = (await env.EXPLAIN.get(key, 'json')) ?? [];
       const seen = new Set(cur.map((x) => x.t));
       const add = clean.filter((x) => !seen.has(x.t));
       if (add.length) {
         const merged = [...cur, ...add].sort((a, b) => a.t - b.t).slice(-5000);
-        await env.EXPLAIN.put('my:snaps', JSON.stringify(merged));
+        await env.EXPLAIN.put(key, JSON.stringify(merged));
       }
       return json({ added: add.length }, 200, origin);
     }
@@ -293,7 +338,10 @@ export default {
     }
     if (url.pathname === '/my') {
       if (!tokenOk(req, env.MY_TOKEN)) return json({ error: 'forbidden' }, 403, origin);
-      return json({ neuron: env.MY_NEURON ?? null, snaps: (await env.EXPLAIN.get('my:snaps', 'json')) ?? [] }, 200, origin, { 'Cache-Control': 'no-store' });
+      const want = url.searchParams.get('neuron') ?? env.MY_NEURON ?? '';
+      const list = await privList(env);
+      if (!list.includes(want)) return json({ neuron: null, snaps: [], neurons: list }, 200, origin, { 'Cache-Control': 'no-store' });
+      return json({ neuron: want, snaps: (await env.EXPLAIN.get(snapKey(env, want), 'json')) ?? [], neurons: list }, 200, origin, { 'Cache-Control': 'no-store' });
     }
     if (url.pathname === '/tracked') return json((await env.EXPLAIN.get('neurons:tracked', 'json')) ?? [], 200, origin, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/cycles' && req.method === 'GET') {

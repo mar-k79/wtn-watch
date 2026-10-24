@@ -98,13 +98,39 @@ export async function mySnaps(id: string): Promise<Snap[] | null> {
   const t = myToken();
   if (!t || !EXPLAIN_URL) return null;
   try {
-    const r = await fetch(`${EXPLAIN_URL}/my`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' });
+    const r = await fetch(`${EXPLAIN_URL}/my?neuron=${id}`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' });
     if (!r.ok) return null;
     const j = (await r.json()) as { neuron: string | null; snaps: Snap[] };
     return j.neuron === id ? j.snaps : null;
   } catch {
     return null;
   }
+}
+
+/** neurons the worker snapshots privately every hour (token-gated); null = no token / wrong token */
+export async function cloudNeurons(): Promise<{ neurons: string[]; fixed: string | null; max: number } | null> {
+  const t = myToken();
+  if (!t || !EXPLAIN_URL) return null;
+  try {
+    const r = await fetch(`${EXPLAIN_URL}/my/neurons`, { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** turn private hourly cloud history on/off for a neuron; stored history is kept when turned off */
+export async function setCloudNeuron(id: string, on: boolean): Promise<string[]> {
+  const t = myToken();
+  if (!t || !EXPLAIN_URL) throw new Error('No sync token in this browser');
+  const r = await fetch(`${EXPLAIN_URL}/my/neurons`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ neuron: id, on }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+  return j.neurons as string[];
 }
 
 /** private neurons are never published — their history is kept only in this browser, one snapshot per visit */

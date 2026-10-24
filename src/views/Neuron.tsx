@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { CloudCheck } from 'lucide-react';
+import { Cloud, CloudCheck, CloudOff } from 'lucide-react';
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, Download, Info, Lock, RefreshCw, Search, Star, Upload } from 'lucide-react';
-import { exportSnaps, importSnaps, pushMySnaps, loadNeuron, localSnaps, isFavorite, mySnaps, myToken, toggleFavorite, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
+import { cloudNeurons, setCloudNeuron, exportSnaps, importSnaps, pushMySnaps, loadNeuron, localSnaps, isFavorite, mySnaps, myToken, toggleFavorite, setMyToken, snapOf, validAccount, HALF_YEAR, type Flow, type Snap } from '../lib/neuron';
 import { neuronState } from '../lib/data';
 import { useAsync } from '../lib/useAsync';
 import { date, opt, short } from '../lib/format';
@@ -333,6 +333,7 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
             <Button type="submit" className="h-8">Save</Button>
           </form>
         )}
+        {mine && data?.isPrivate && !!myToken() && <CloudToggle id={id} onChange={() => setTok((t) => t + ' ')} />}
         {loading ? <div className="space-y-2 p-5">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-6 w-full" />)}</div>
           : !shown.length ? <Empty>No activity recorded yet.</Empty> : (
           <ul className="px-5 py-2">
@@ -373,6 +374,52 @@ export function Neuron({ id, acc }: { id: string; acc?: string }) {
       </Card>
       {data?.info && <RewardsInfo id={id} isPrivate={data.isPrivate} mine={mine} extra={priv.data ?? []} onImported={() => setTok((t) => t + ' ')} />}
       <p className="px-1 text-xs text-muted">All data comes from free query calls to NNS governance and the ICP index — no cycles are spent.</p>
+    </div>
+  );
+}
+
+/** owner-only switch: keep this private neuron's history in the worker (hourly, works with the app closed) */
+function CloudToggle({ id, onChange }: { id: string; onChange: () => void }) {
+  const [v, setV] = useState(0);
+  const st = useAsync(cloudNeurons, [v]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  if (!st.data) return null;
+  const on = st.data.neurons.includes(id);
+  const fixed = st.data.fixed === id;
+  const toggle = async () => {
+    setBusy(true);
+    setErr(undefined);
+    try {
+      await setCloudNeuron(id, !on);
+      if (!on) await pushMySnaps(id, localSnaps(id)); // seed the cloud with what this browser already has
+      setV((x) => x + 1);
+      onChange();
+    } catch (e) {
+      setErr(String((e as Error).message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3 text-xs">
+      {on ? <Cloud className="size-4 text-yes" /> : <CloudOff className="size-4 text-muted" />}
+      <span className="min-w-0 flex-1 text-muted">
+        {on
+          ? 'Private cloud history is on: snapshot every hour, even when this app is closed. Only your sync token can read it.'
+          : 'Private cloud history is off: history is kept only in this browser, one snapshot per visit.'}
+        {err && <span className="ml-2 text-no">{err}</span>}
+      </span>
+      {fixed ? (
+        <Badge tone="yes">always on</Badge>
+      ) : (
+        <Button onClick={toggle} disabled={busy} variant={on ? 'default' : 'primary'} className="h-8">
+          {busy ? '…' : on ? 'Turn off' : 'Save privately in cloud'}
+        </Button>
+      )}
+      <span className="basis-full text-[11px] text-muted">
+        {st.data.neurons.length}/{st.data.max} private neurons in the cloud. Turning off stops new snapshots; stored history is kept.
+      </span>
     </div>
   );
 }
