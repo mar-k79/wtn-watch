@@ -6,6 +6,13 @@
     "on_main": true,
     "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/39839021652"
   },
+  "61e0fadbbb16ab883a50e40037d680b776ebdb9aa1667c83baa3b2e99a5b8b12": {
+    "canister": "boomerang",
+    "commit": "38eaaf8c3419aef6aa4daed15ca71a53d8daa0b2",
+    "on_branch": false,
+    "on_main": false,
+    "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/41087155086"
+  },
   "6dc0b6aaa3f51a8dc1f6378eacfced768f0ce39684a14d88fb230ddaf03c6910": {
     "canister": "water_neuron",
     "commit": "cd865e97772ff93f7d10b939d86f0b2fd0e52eff",
@@ -20,11 +27,32 @@
     "on_main": true,
     "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/39839021652"
   },
+  "72067d87ad44d7efdace5c640a7afeee31b04b184f2f3bd4302acdfb6009730e": {
+    "canister": "icrc_validator",
+    "commit": "38eaaf8c3419aef6aa4daed15ca71a53d8daa0b2",
+    "on_branch": false,
+    "on_main": false,
+    "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/41087155086"
+  },
+  "7fa041dc85b6d72861d8253dea31790bdbb52dcffa8c31f65a365cbd6a657b47": {
+    "canister": "water_neuron",
+    "commit": "38eaaf8c3419aef6aa4daed15ca71a53d8daa0b2",
+    "on_branch": false,
+    "on_main": false,
+    "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/41087155086"
+  },
   "94fa86805d30890aca66e3ab59dec62657fc5d4e71f300037a1182bed2ce5586": {
     "canister": "boomerang",
     "commit": "cd865e97772ff93f7d10b939d86f0b2fd0e52eff",
     "on_branch": true,
     "on_main": true,
     "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/39839021652"
+  },
+  "ca96788330cebd9baffededf7387a54d9e0b30198038dd6a8f96bcf225ffc32a": {
+    "canister": "water_neuron_self_check",
+    "commit": "38eaaf8c3419aef6aa4daed15ca71a53d8daa0b2",
+    "on_branch": false,
+    "on_main": false,
+    "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/41087155086"
   }
 }

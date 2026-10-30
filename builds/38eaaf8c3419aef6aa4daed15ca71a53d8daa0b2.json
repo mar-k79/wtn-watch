@@ -1,0 +1,14 @@
+{
+  "commit": "38eaaf8c3419aef6aa4daed15ca71a53d8daa0b2",
+  "built_at": "2026-10-30T16:14:43Z",
+  "run_url": "https://github.com/mar-k79/wtn-watch/actions/runs/41087155086",
+  "runner": "ubuntu-22.04 + nix",
+  "wasms": {
+    "boomerang": "61e0fadbbb16ab883a50e40037d680b776ebdb9aa1667c83baa3b2e99a5b8b12",
+    "icrc_validator": "72067d87ad44d7efdace5c640a7afeee31b04b184f2f3bd4302acdfb6009730e",
+    "water_neuron": "7fa041dc85b6d72861d8253dea31790bdbb52dcffa8c31f65a365cbd6a657b47",
+    "water_neuron_self_check": "ca96788330cebd9baffededf7387a54d9e0b30198038dd6a8f96bcf225ffc32a"
+  },
+  "on_main": false,
+  "on_branch": false
+}
